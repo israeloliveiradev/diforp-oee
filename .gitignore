@@ -1,0 +1,38 @@
+# Segredos e ambiente local — nunca versionar .env
+.env
+.env.*
+!.env.example
+
+# Python
+.venv
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+alembic/versions/__pycache__/
+
+# Node / Vite
+node_modules/
+dist/
+apps/web/dist/
+
+# Artefatos de runtime (volumes Docker na VPS)
+uploads/manuais/*
+!uploads/manuais/.gitkeep
+models/acmp/*
+!models/acmp/.gitkeep
+
+# Ferramentas de editor que não fazem parte do produto
+.agents/
+.cursor/agents/ui-ux-pro-max/
+skills-lock.json
+
+# Lixo local
+.DS_Store
+*.log
+WhatsApp Image *
+
+# PDFs gerados ficam em docs/manuais; cache do script não
+docs/manuais/__pycache__/

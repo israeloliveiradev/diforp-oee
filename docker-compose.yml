@@ -1,0 +1,98 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-oee}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oee_dev_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-oee}
+    ports:
+      - "5432:5432"
+    volumes:
+      - oee_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oee} -d ${POSTGRES_DB:-oee}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 512m
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - oee_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    mem_limit: 128m
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-oee}:${POSTGRES_PASSWORD:-oee_dev_change_me}@postgres:5432/${POSTGRES_DB:-oee}
+      REDIS_URL: redis://redis:6379/0
+      MODELS_DIR: /data/models/acmp
+      UPLOADS_DIR: /data/uploads/manuais
+    volumes:
+      - oee_models:/data/models/acmp
+      - oee_uploads:/data/uploads/manuais
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    mem_limit: 1g
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    command: ["python", "-m", "oee.worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-oee}:${POSTGRES_PASSWORD:-oee_dev_change_me}@postgres:5432/${POSTGRES_DB:-oee}
+      REDIS_URL: redis://redis:6379/0
+      MODELS_DIR: /data/models/acmp
+      UPLOADS_DIR: /data/uploads/manuais
+    volumes:
+      - oee_models:/data/models/acmp
+      - oee_uploads:/data/uploads/manuais
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    mem_limit: 1g
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    mem_limit: 128m
+
+volumes:
+  oee_pg:
+  oee_redis:
+  oee_models:
+  oee_uploads:
