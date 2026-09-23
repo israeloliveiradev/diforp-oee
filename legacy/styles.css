@@ -1,0 +1,1179 @@
+/* =========================================================================
+ * styles.css
+ * Responsabilidade: identidade visual e layout responsivo.
+ *
+ * Direção: identidade DiFORP Orbis aplicada a uma tela de operação. O press
+ * kit define petróleo profundo como a superfície escura de telas de
+ * operação, âmbar como sinalização de evento (uso máximo de 10%), verde-
+ * sálvia como confirmação de conformidade e off-white no lugar do branco
+ * puro. A proporção alvo é 60 / 30 / 10.
+ *
+ * A regra de escassez do âmbar teve consequência prática aqui: antes ele
+ * era o acento genérico da interface — links, item de menu ativo, destaques.
+ * Espalhado assim, deixa de sinalizar. Agora aparece só onde há evento,
+ * desvio ou decisão pendente; o resto do acento passou para os tons de aço.
+ *
+ * Cada estado operacional recebe cor + textura + ícone, de modo que a
+ * informação nunca dependa apenas da cor.
+ * ========================================================================= */
+
+/* --------------------------------------------------------------------- */
+/* 1. Tokens                                                              */
+/* --------------------------------------------------------------------- */
+:root {
+  /* --- Paleta da marca, conforme press kit v1.0 --- */
+  --petroleo: #0B3C49;
+  --petroleo-profundo: #082830;
+  --petroleo-suave: #155263;
+  --ambar: #D97B29;
+  --cobre: #C67A3C;
+  --salvia: #4A6B57;
+  --papel: #F5F4F0;
+  --pedra: #E8E6E1;
+  --pedra-escura: #D6D3CC;
+  --tinta: #1A222C;
+  --aco-claro: #9FB6BC;
+  --aco: #7FA0A8;
+  --alerta: #B23A2E;
+
+  /* --- Extensões de legibilidade sobre petróleo profundo ---
+     Sálvia e alerta, nos valores do press kit, foram desenhados para
+     aplicação sobre claro. Sobre a superfície escura da tela de operação
+     eles não alcançam contraste de leitura. Estas variantes preservam o
+     matiz e elevam a luminosidade; são extensões declaradas, não
+     substituições da paleta. */
+  --salvia-clara: #6FA383;   /* 5,3:1 sobre o fundo (a sálvia do kit dá 2,6:1) */
+  --alerta-claro: #DC6C57;   /* 4,7:1 (o alerta do kit dá 2,6:1) */
+  --ambar-claro: #E0A46A;
+
+  /* Âmbar tem 4,2:1 sobre a superfície dos painéis — suficiente para
+     elemento gráfico, insuficiente para texto pequeno. Esta variante é
+     usada apenas onde o âmbar vira palavra: rótulos, criticidade,
+     marcador de ação sensível. O âmbar do kit permanece nos preenchimentos
+     e indicadores, onde a fidelidade de matiz importa. */
+  --ambar-texto: #E89A55;
+
+  /* --- Superfícies --- */
+  --fundo: var(--petroleo-profundo);
+  --fundo-2: var(--petroleo);
+  --superficie: #0C3543;
+  --superficie-alta: var(--petroleo-suave);
+  --borda: rgba(159, 182, 188, 0.16);
+  --borda-forte: rgba(159, 182, 188, 0.32);
+
+  /* --- Texto --- */
+  --texto: var(--papel);
+  --texto-suave: var(--aco-claro);
+  --texto-fraco: var(--aco);
+
+  /* --- Papéis semânticos (nomes antigos mantidos para não reescrever
+         todas as regras; o valor é que mudou) --- */
+  --verde: var(--salvia-clara);
+  --azul: var(--aco-claro);
+  --vermelho: var(--alerta-claro);
+  --roxo: #6E9FB5;
+  --ciano: var(--aco);
+
+  --raio: 3px;
+  --raio-grande: 6px;
+  --sombra: 0 18px 40px -18px rgba(8, 40, 48, 0.75);
+
+  /* Archivo para interface, IBM Plex Mono para dado e carimbo de tempo —
+     "o mono é a voz do registro auditável", conforme o press kit. */
+  --fonte-ui: "Archivo", "Segoe UI", Roboto, "Helvetica Neue", Arial, system-ui, sans-serif;
+  --fonte-dados: "IBM Plex Mono", ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+
+  --largura-menu: 232px;
+}
+
+/* Cores por estado operacional.
+ *
+ * A paleta da marca é deliberadamente estreita — quatro cores com função
+ * definida — e a operação tem dez estados. Em vez de inventar seis matizes
+ * novos e diluir o sistema, os estados de maior carga semântica recebem a
+ * cor da marca que lhes corresponde (conformidade, evento, falha) e os
+ * demais ficam em tons de aço. A distinção entre eles não depende da cor:
+ * cada estado tem também textura e ícone próprios. */
+.estado--PRODUZINDO            { --cor-estado: var(--salvia-clara);  --cor-estado-rgb: 111, 163, 131; }
+.estado--SETUP                 { --cor-estado: var(--cobre);         --cor-estado-rgb: 198, 122, 60; }
+.estado--MANUTENCAO            { --cor-estado: var(--alerta-claro);  --cor-estado-rgb: 220, 108, 87; }
+.estado--PARADA_NAO_PLANEJADA  { --cor-estado: var(--ambar);         --cor-estado-rgb: 217, 123, 41; }
+.estado--MICROPARADA           { --cor-estado: var(--ambar-claro);   --cor-estado-rgb: 224, 164, 106; }
+.estado--AGUARDANDO_MATERIAL   { --cor-estado: #6E9FB5;              --cor-estado-rgb: 110, 159, 181; }
+.estado--AGUARDANDO_OPERADOR   { --cor-estado: var(--aco-claro);     --cor-estado-rgb: 159, 182, 188; }
+.estado--LIMPEZA               { --cor-estado: var(--aco);           --cor-estado-rgb: 127, 160, 168; }
+.estado--PARADA_PLANEJADA      { --cor-estado: #A7AAA2;              --cor-estado-rgb: 167, 170, 162; }
+.estado--SEM_ORDEM             { --cor-estado: #7C8E96;              --cor-estado-rgb: 124, 142, 150; }
+
+/* --------------------------------------------------------------------- */
+/* 2. Base                                                                */
+/* --------------------------------------------------------------------- */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: var(--fonte-ui);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+}
+
+h1, h2, h3, h4 {
+  margin: 0 0 .4rem;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+
+p { margin: 0 0 .6rem; }
+
+a { color: var(--aco-claro); text-decoration-color: rgba(159, 182, 188, .45); }
+
+button { font-family: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--ambar);
+  outline-offset: 2px;
+}
+
+small { font-size: .68em; color: var(--texto-suave); font-weight: 500; }
+
+.nota { color: var(--texto-suave); font-size: .88rem; }
+.vazio { color: var(--texto-fraco); font-style: italic; padding: .6rem 0; }
+.subtitulo { margin-top: 1.2rem; color: var(--texto-suave); font-size: .95rem; text-transform: uppercase; letter-spacing: .08em; }
+
+/* --------------------------------------------------------------------- */
+/* 3. Estrutura                                                           */
+/* --------------------------------------------------------------------- */
+.aplicacao {
+  display: grid;
+  grid-template-columns: var(--largura-menu) 1fr;
+  min-height: 100vh;
+  /* dvh acompanha a barra do Safari no iPad, que aparece e some ao rolar. */
+  min-height: 100dvh;
+}
+
+.lateral {
+  background: var(--fundo-2);
+  border-right: 1px solid var(--borda);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.marca {
+  padding: 1.1rem 1.1rem .9rem;
+  border-bottom: 1px solid var(--borda);
+}
+
+.marca__logo {
+  background-image: var(--logo-diforp);
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: left center;
+  width: 118px;
+  height: 30px;
+}
+
+/* Nome do produto em mono maiúsculo espaçado, como o press kit trata os
+   rótulos de contexto ("PIN · LINHA 03 · GRANULAÇÃO"). */
+.marca__produto {
+  margin: .55rem 0 0;
+  font-family: var(--fonte-dados);
+  font-size: .64rem;
+  color: var(--texto-fraco);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  padding: .6rem 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.menu__item {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  padding: .6rem 1.1rem;
+  color: var(--texto-suave);
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  font-size: .93rem;
+}
+
+.menu__item:hover { background: rgba(255, 255, 255, .04); color: var(--texto); }
+
+.menu__item--ativo {
+  color: var(--texto);
+  border-left-color: var(--ambar);
+  background: rgba(21, 82, 99, .55);
+}
+
+.menu__icone { width: 1.2rem; text-align: center; opacity: .85; }
+
+.lateral__rodape { padding: .9rem 1.1rem; border-top: 1px solid var(--borda); }
+
+.principal { display: flex; flex-direction: column; min-width: 0; }
+
+.topo {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .8rem 1.4rem;
+  border-bottom: 1px solid var(--borda);
+  background: var(--fundo-2);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.topo__identificacao { display: flex; align-items: baseline; gap: .7rem; flex: 1; }
+
+/* Índice de seção em mono âmbar: o mesmo tratamento que o press kit dá aos
+   marcadores "§ 01". Área mínima, função de sinalização preservada. */
+.topo__eyebrow {
+  font-family: var(--fonte-dados);
+  font-size: .66rem;
+  letter-spacing: .16em;
+  color: var(--ambar-texto);
+  text-transform: uppercase;
+}
+
+.topo__titulo { font-size: 1.05rem; margin: 0; }
+
+.topo__relogio { font-family: var(--fonte-dados); color: var(--texto-suave); font-size: .85rem; }
+
+.conteudo { padding: 1.2rem 1.4rem 3rem; }
+
+/* Modo operador: menu reduzido às telas de chão de fábrica e tipografia maior */
+body[data-modo="operador"] .menu__item[data-modo="gestao"] { display: none; }
+body[data-modo="operador"] { font-size: 17px; }
+
+/* --------------------------------------------------------------------- */
+/* 4. Botões                                                              */
+/* --------------------------------------------------------------------- */
+.botao {
+  border: 1px solid var(--borda-forte);
+  background: var(--superficie);
+  color: var(--texto);
+  padding: .5rem .9rem;
+  border-radius: var(--raio);
+  cursor: pointer;
+  font-size: .9rem;
+  transition: background .15s ease, border-color .15s ease;
+}
+
+.botao:hover { background: var(--superficie-alta); }
+.botao:disabled { opacity: .4; cursor: not-allowed; }
+
+.botao--primario { background: var(--ambar); border-color: var(--ambar); color: var(--petroleo-profundo); font-weight: 700; }
+.botao--primario:hover { background: var(--ambar-claro); }
+.botao--perigo { background: rgba(178, 58, 46, .22); border-color: var(--alerta-claro); color: #F0BDB4; }
+.botao--perigo:hover { background: rgba(178, 58, 46, .36); }
+.botao--secundario { background: transparent; }
+.botao--pequeno { padding: .25rem .55rem; font-size: .8rem; }
+
+.botao-icone {
+  background: none;
+  border: none;
+  color: var(--texto-suave);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: .2rem .4rem;
+}
+
+.link {
+  background: none;
+  border: none;
+  color: var(--ambar);
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+  text-align: left;
+  text-decoration: underline;
+}
+
+/* Botões grandes do operador — alvo de toque mínimo de 88px de altura */
+.acoes-operador {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: .6rem;
+}
+
+.botao-op {
+  min-height: 88px;
+  border-radius: var(--raio-grande);
+  border: 1px solid var(--borda-forte);
+  background: var(--superficie);
+  color: var(--texto);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+  cursor: pointer;
+  padding: .6rem;
+  text-align: center;
+  transition: transform .1s ease, background .15s ease;
+}
+
+.botao-op:active { transform: scale(.97); }
+.botao-op:disabled { opacity: .35; cursor: not-allowed; }
+.botao-op__icone { font-size: 1.6rem; line-height: 1; }
+.botao-op__rotulo { font-size: .92rem; font-weight: 600; }
+
+.botao-op--primario { background: rgba(74, 107, 87, .35); border-color: rgba(111, 163, 131, .6); }
+.botao-op--alerta { background: rgba(217, 123, 41, .16); border-color: rgba(217, 123, 41, .6); }
+.botao-op--perigo { background: rgba(178, 58, 46, .2); border-color: rgba(201, 80, 63, .6); }
+.botao-op--secundario { background: var(--superficie); }
+
+/* --------------------------------------------------------------------- */
+/* 5. Painéis, KPIs e tabelas                                             */
+/* --------------------------------------------------------------------- */
+.painel {
+  background: var(--fundo-2);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-grande);
+  padding: 1rem 1.1rem 1.2rem;
+  margin-bottom: 1.1rem;
+}
+
+.painel__cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+
+.painel__titulo {
+  font-size: .82rem;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: var(--texto-suave);
+  margin-bottom: .8rem;
+}
+
+.grade-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.1rem; }
+
+.kpis, .op-indicadores, .op-producao {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: .7rem;
+  margin-bottom: 1.1rem;
+}
+
+.op-producao { margin-bottom: .8rem; }
+
+.kpi {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: .7rem .8rem;
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+}
+
+.kpi__rotulo {
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--texto-suave);
+}
+
+.kpi__valor {
+  font-family: var(--fonte-dados);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+
+.kpi__detalhe { font-size: .74rem; color: var(--texto-fraco); }
+
+.kpi--destaque { border-color: var(--borda-forte); background: var(--superficie-alta); }
+.kpi--destaque .kpi__valor { font-size: 2rem; }
+
+.faixa--bom { color: var(--verde); }
+.faixa--atencao { color: var(--ambar-texto); }
+.faixa--critico { color: var(--vermelho); }
+.faixa--indefinido { color: var(--texto-fraco); }
+
+.tabela-rolagem { overflow-x: auto; }
+
+.tabela { width: 100%; border-collapse: collapse; font-size: .88rem; }
+
+.tabela th {
+  text-align: left;
+  padding: .5rem .6rem;
+  border-bottom: 1px solid var(--borda-forte);
+  color: var(--texto-suave);
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+
+.tabela td { padding: .5rem .6rem; border-bottom: 1px solid var(--borda); vertical-align: middle; }
+.tabela tbody tr:hover { background: rgba(255, 255, 255, .03); }
+
+/* --------------------------------------------------------------------- */
+/* 6. Estados: cor + textura + ícone                                      */
+/* --------------------------------------------------------------------- */
+.estado-fundo { background-color: rgba(var(--cor-estado-rgb), .22); }
+.estado-borda { border-left: 4px solid var(--cor-estado); }
+
+.padrao--diagonal {
+  background-image: repeating-linear-gradient(45deg,
+    rgba(var(--cor-estado-rgb), .35) 0 6px, transparent 6px 12px);
+}
+
+.padrao--listrado {
+  background-image: repeating-linear-gradient(0deg,
+    rgba(var(--cor-estado-rgb), .3) 0 3px, transparent 3px 8px);
+}
+
+.padrao--pontilhado {
+  background-image: radial-gradient(rgba(var(--cor-estado-rgb), .55) 1.3px, transparent 1.4px);
+  background-size: 7px 7px;
+}
+
+.padrao--solido { background-image: none; }
+
+.selo {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .12rem .5rem;
+  border-radius: 999px;
+  border: 1px solid var(--cor-estado);
+  background-color: rgba(var(--cor-estado-rgb), .16);
+  font-size: .78rem;
+  white-space: nowrap;
+}
+
+.etiqueta {
+  display: inline-block;
+  margin-left: .4rem;
+  padding: .05rem .4rem;
+  border-radius: 999px;
+  border: 1px solid var(--borda-forte);
+  font-size: .68rem;
+  color: var(--texto-suave);
+}
+
+.legenda {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem .9rem;
+  padding: .7rem 0 0;
+  margin: 0;
+  font-size: .76rem;
+  color: var(--texto-suave);
+}
+
+.legenda li { display: flex; align-items: center; gap: .35rem; }
+
+.legenda__amostra {
+  width: 16px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid var(--cor-estado);
+  display: inline-block;
+}
+
+/* --------------------------------------------------------------------- */
+/* 7. Tela do operador                                                    */
+/* --------------------------------------------------------------------- */
+.op-cabecalho {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.2rem;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: .9rem;
+}
+
+.op-cabecalho__caminho { color: var(--texto-suave); font-size: .82rem; margin: .3rem 0 0; }
+
+.rotulo-campo {
+  display: block;
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--texto-suave);
+  margin-bottom: .25rem;
+}
+
+.seletor-grande {
+  background: var(--superficie);
+  color: var(--texto);
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio);
+  padding: .5rem .7rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  min-width: 250px;
+}
+
+.op-contexto { display: flex; flex-wrap: wrap; gap: 1.4rem; margin: 0; }
+.op-contexto dt { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; color: var(--texto-suave); }
+.op-contexto dd { margin: .15rem 0 0; font-family: var(--fonte-dados); font-size: 1rem; }
+
+/* Faixa de estado — o elemento de maior peso visual da aplicação */
+.faixa-estado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1.1rem 1.3rem;
+  border: 1px solid var(--cor-estado);
+  border-left-width: 10px;
+  border-radius: var(--raio-grande);
+  margin-bottom: 1.1rem;
+}
+
+.faixa-estado__conteudo { display: flex; align-items: center; gap: 1rem; }
+.faixa-estado__icone { font-size: 2.6rem; line-height: 1; color: var(--cor-estado); }
+.faixa-estado__rotulo { font-size: .7rem; text-transform: uppercase; letter-spacing: .14em; color: var(--texto-suave); margin: 0; }
+
+.faixa-estado__nome {
+  font-size: clamp(1.6rem, 4vw, 2.6rem);
+  line-height: 1.05;
+  margin: .1rem 0 0;
+  text-transform: uppercase;
+  letter-spacing: -.02em;
+}
+
+.faixa-estado__motivo { margin: .3rem 0 0; color: var(--texto-suave); font-size: .9rem; }
+.faixa-estado__tempo { text-align: right; }
+.faixa-estado__desde { display: block; font-size: .76rem; color: var(--texto-suave); }
+
+.cronometro {
+  font-family: var(--fonte-dados);
+  font-size: clamp(1.8rem, 5vw, 2.8rem);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.op-meta { margin-top: .4rem; }
+
+.progresso { display: flex; flex-direction: column; gap: .3rem; }
+.progresso__trilha { height: 14px; background: var(--superficie); border: 1px solid var(--borda); border-radius: 999px; overflow: hidden; }
+.progresso__preenchimento { height: 100%; background: currentColor; transition: width .4s ease; }
+.progresso__texto { font-family: var(--fonte-dados); font-size: .85rem; color: var(--texto-suave); }
+
+/* --------------------------------------------------------------------- */
+/* 8. Andon (painel de estado das máquinas)                               */
+/* --------------------------------------------------------------------- */
+.andon { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .7rem; }
+
+.andon__card {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-left: 5px solid var(--cor-estado);
+  border-radius: var(--raio);
+  padding: .7rem .8rem;
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  text-align: left;
+  color: var(--texto);
+  cursor: pointer;
+}
+
+.andon__card:hover { background: var(--superficie-alta); }
+.andon__nome { font-weight: 600; }
+.andon__estado { font-size: .78rem; padding: .12rem .45rem; border-radius: 3px; align-self: flex-start; }
+.andon__tempo, .andon__oee { font-family: var(--fonte-dados); font-size: .82rem; color: var(--texto-suave); }
+.andon__oee { font-size: .95rem; font-weight: 600; }
+
+/* --------------------------------------------------------------------- */
+/* 9. Timeline                                                            */
+/* --------------------------------------------------------------------- */
+.timeline { margin-top: .3rem; }
+
+.timeline__faixa {
+  position: relative;
+  height: 38px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  overflow: hidden;
+}
+
+.timeline__bloco {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-right: 1px solid rgba(8, 40, 48, .6);
+}
+
+.timeline__regua {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--fonte-dados);
+  font-size: .68rem;
+  color: var(--texto-fraco);
+  margin-top: .25rem;
+}
+
+.timeline-linha { display: grid; grid-template-columns: 130px 1fr; gap: .6rem; align-items: center; margin-bottom: .5rem; }
+.timeline-linha__rotulo { font-size: .8rem; color: var(--texto-suave); }
+
+/* --------------------------------------------------------------------- */
+/* 10. Filtros e formulários                                              */
+/* --------------------------------------------------------------------- */
+.filtros {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: .6rem;
+  align-items: end;
+  background: var(--fundo-2);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-grande);
+  padding: .8rem 1rem;
+  margin-bottom: 1.1rem;
+}
+
+.filtros__campo { display: flex; flex-direction: column; gap: .2rem; }
+
+.filtros__campo label {
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--texto-suave);
+}
+
+.filtros__acoes { display: flex; align-items: flex-end; }
+
+select, input[type="text"], input[type="number"], input[type="time"],
+input[type="datetime-local"], textarea {
+  background: var(--superficie);
+  color: var(--texto);
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio);
+  padding: .45rem .55rem;
+  font-size: .9rem;
+  font-family: inherit;
+  width: 100%;
+  /* Sem isto o Safari do iPad desenha campos brancos arredondados,
+     ilegíveis sobre o fundo escuro. */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* O select perde a seta junto com a aparência nativa; devolvemos uma. */
+select {
+  background-image: linear-gradient(45deg, transparent 50%, var(--texto-suave) 50%),
+                    linear-gradient(135deg, var(--texto-suave) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 1.6rem;
+}
+
+textarea { resize: vertical; }
+
+.formulario { display: flex; flex-direction: column; gap: .35rem; }
+.formulario label { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-suave); margin-top: .5rem; }
+.formulario--grade { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem 1rem; align-items: center; }
+.formulario--grade label { margin-top: 0; }
+
+.linha-controles { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-top: .6rem; }
+.interruptor { display: inline-flex; align-items: center; gap: .4rem; }
+.interruptor input { width: auto; }
+
+.erro-campo { color: #F0BDB4; font-size: .85rem; margin-top: .5rem; }
+
+.abas { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem; }
+
+.aba {
+  background: var(--fundo-2);
+  border: 1px solid var(--borda);
+  color: var(--texto-suave);
+  padding: .4rem .8rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: .85rem;
+}
+
+.aba--ativa { background: rgba(21, 82, 99, .7); border-color: var(--aco); color: var(--texto); }
+
+/* --------------------------------------------------------------------- */
+/* 11. Modal                                                              */
+/* --------------------------------------------------------------------- */
+.modal-fundo {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 40, 48, .82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+           max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  z-index: 100;
+  overscroll-behavior: contain;
+}
+
+.modal {
+  background: var(--fundo-2);
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-grande);
+  box-shadow: var(--sombra);
+  width: min(620px, 100%);
+  max-height: 90vh;
+  max-height: 90dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal__cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .9rem 1.1rem;
+  border-bottom: 1px solid var(--borda);
+}
+
+.modal__cabecalho h2 { font-size: 1.05rem; margin: 0; }
+.modal__corpo { padding: 1rem 1.1rem; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.modal__rodape { display: flex; justify-content: flex-end; gap: .6rem; padding: .9rem 1.1rem; border-top: 1px solid var(--borda); }
+
+/* Seleção de motivos */
+.motivos__categorias { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .8rem; }
+
+.chip {
+  background: var(--superficie);
+  border: 1px solid var(--borda-forte);
+  color: var(--texto-suave);
+  border-radius: 999px;
+  padding: .45rem .9rem;
+  cursor: pointer;
+  font-size: .9rem;
+}
+
+.chip--ativo { background: rgba(21, 82, 99, .75); border-color: var(--aco); color: var(--texto); }
+
+.motivos__lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .5rem; margin-bottom: .9rem; }
+
+.motivo {
+  background: var(--superficie);
+  border: 1px solid var(--borda-forte);
+  color: var(--texto);
+  border-radius: var(--raio);
+  padding: .8rem .7rem;
+  min-height: 62px;
+  cursor: pointer;
+  text-align: left;
+  font-size: .92rem;
+}
+
+.motivo:hover { background: var(--superficie-alta); }
+.motivo--ativo { border-color: var(--ambar); background: rgba(217, 123, 41, .18); }
+
+/* Teclado de quantidade */
+.quantidade { display: flex; flex-direction: column; gap: .5rem; }
+
+.quantidade__valor {
+  font-family: var(--fonte-dados);
+  font-size: 3rem;
+  text-align: center;
+  padding: .5rem;
+  background: var(--superficie);
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio);
+  font-variant-numeric: tabular-nums;
+}
+
+.quantidade__atalhos { display: grid; grid-template-columns: repeat(4, 1fr); gap: .45rem; }
+.quantidade__atalhos .botao { min-height: 52px; font-size: 1rem; }
+
+/* --------------------------------------------------------------------- */
+/* 12. Insights                                                           */
+/* --------------------------------------------------------------------- */
+.insights { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: .9rem; }
+
+.insight {
+  background: var(--fundo-2);
+  border: 1px solid var(--borda);
+  border-left: 5px solid var(--texto-fraco);
+  border-radius: var(--raio-grande);
+  padding: .9rem 1rem;
+}
+
+.insight--critico { border-left-color: var(--vermelho); }
+.insight--atencao { border-left-color: var(--ambar); }
+.insight--oportunidade { border-left-color: var(--verde); }
+.insight--informativo { border-left-color: var(--azul); }
+
+.insight__cabecalho { display: flex; justify-content: space-between; gap: .6rem; margin-bottom: .4rem; }
+
+.insight__criticidade {
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  font-weight: 700;
+}
+
+.insight--critico .insight__criticidade { color: var(--vermelho); }
+.insight--atencao .insight__criticidade { color: var(--ambar-texto); }
+.insight--oportunidade .insight__criticidade { color: var(--verde); }
+.insight--informativo .insight__criticidade { color: var(--azul); }
+
+.insight__indicador { font-size: .7rem; color: var(--texto-fraco); text-transform: uppercase; letter-spacing: .1em; }
+.insight__titulo { font-size: 1rem; margin-bottom: .4rem; }
+.insight__descricao { font-size: .88rem; color: var(--texto-suave); }
+.insight__maquina, .insight__periodo { font-size: .76rem; color: var(--texto-fraco); margin: 0; }
+.insight__acao { font-size: .85rem; margin-top: .5rem; color: var(--texto); }
+
+/* --------------------------------------------------------------------- */
+/* 13. Gráficos                                                           */
+/* --------------------------------------------------------------------- */
+.grafico { position: relative; width: 100%; }
+
+.grafico-vazio { color: var(--texto-fraco); font-style: italic; padding: 1.5rem 0; text-align: center; }
+
+.grafico-simples { display: flex; flex-direction: column; gap: .35rem; }
+.grafico-simples__linha { display: grid; grid-template-columns: 130px 1fr 80px; gap: .5rem; align-items: center; }
+.grafico-simples__rotulo { font-size: .8rem; color: var(--texto-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grafico-simples__trilha { display: flex; gap: 2px; height: 18px; align-items: center; }
+.grafico-simples__barra { height: 100%; border-radius: 2px; min-width: 2px; }
+.grafico-simples__valor { font-family: var(--fonte-dados); font-size: .8rem; text-align: right; }
+.grafico-nota { font-size: .72rem; color: var(--texto-fraco); margin-top: .5rem; }
+
+/* --------------------------------------------------------------------- */
+/* 14. Avisos                                                             */
+/* --------------------------------------------------------------------- */
+#area-avisos {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  z-index: 200;
+  max-width: min(380px, 90vw);
+}
+
+.aviso {
+  background: var(--superficie-alta);
+  border: 1px solid var(--borda-forte);
+  border-left: 4px solid var(--verde);
+  border-radius: var(--raio);
+  padding: .65rem .8rem;
+  font-size: .88rem;
+  box-shadow: var(--sombra);
+  animation: entrar .2s ease;
+}
+
+.aviso--erro { border-left-color: var(--vermelho); }
+.aviso--alerta { border-left-color: var(--ambar); }
+.aviso--saindo { opacity: 0; transition: opacity .3s ease; }
+
+@keyframes entrar {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.alerta-inconsistencia {
+  background: rgba(217, 123, 41, .12);
+  border: 1px solid var(--ambar);
+  border-radius: var(--raio);
+  padding: .7rem .9rem;
+  margin-bottom: 1rem;
+  font-size: .88rem;
+}
+
+/* --------------------------------------------------------------------- */
+/* 15. Responsividade                                                     */
+/* --------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .aplicacao { grid-template-columns: 1fr; }
+
+  .lateral {
+    position: static;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--borda);
+  }
+
+  .menu { flex-direction: row; overflow-x: auto; padding: .3rem; }
+
+  .menu__item {
+    border-left: none;
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+    padding: .55rem .8rem;
+  }
+
+  .menu__item--ativo { border-left-color: transparent; border-bottom-color: var(--ambar); }
+
+  .conteudo { padding: 1rem .8rem 3rem; }
+  .seletor-grande { min-width: 0; width: 100%; }
+  .timeline-linha { grid-template-columns: 1fr; }
+  .formulario--grade { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .quantidade__atalhos { grid-template-columns: repeat(3, 1fr); }
+  .faixa-estado { flex-direction: column; align-items: flex-start; }
+  .faixa-estado__tempo { text-align: left; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* Impressão: relatórios de turno em papel */
+@media print {
+  .lateral, .topo, #area-avisos, .filtros__acoes, .acoes-operador { display: none; }
+  body { background: #fff; color: #111; }
+  .painel, .kpi { border-color: #999; background: #fff; }
+}
+
+/* --------------------------------------------------------------------- */
+/* 16. Tablet e toque (iPad, terminais de chão de fábrica)                */
+/*                                                                       */
+/* O Safari do iPad tem particularidades que quebram uma interface densa: */
+/* dá zoom sozinho em campo com fonte menor que 16px, mostra a lupa de    */
+/* seleção ao segurar um botão, atrasa o clique esperando um duplo toque  */
+/* e desenha controles nativos claros sobre o tema escuro.                */
+/* --------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  /* Abaixo de 16px o iOS amplia a página ao focar o campo e não volta. */
+  select, input[type="text"], input[type="number"], input[type="time"],
+  input[type="datetime-local"], textarea {
+    font-size: 16px;
+    padding: .55rem .6rem;
+  }
+
+  /* Alvos de toque confortáveis com luva. */
+  .botao { min-height: 44px; padding: .5rem .9rem; }
+  .botao--pequeno { min-height: 36px; }
+  .botao-icone { min-width: 44px; min-height: 44px; }
+  .menu__item { padding-top: .7rem; padding-bottom: .7rem; }
+  .aba { min-height: 40px; }
+  td .botao, th .botao { min-height: 38px; }
+}
+
+/* Sem atraso de clique nem lupa de seleção ao segurar um botão. */
+.botao, .botao-op, .botao-icone, .menu__item, .aba,
+[data-acao], [data-categoria], [data-motivo], [data-incremento] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Números e rótulos continuam selecionáveis para copiar. */
+.kpi, .tabela, .insight, .op-indicadores { -webkit-user-select: text; user-select: text; }
+
+/* Rolagem por inércia nas áreas internas. */
+.conteudo, .tabela-rolagem, .lateral, .modal__corpo, .motivos__lista {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Áreas seguras: iPad com câmera no lado maior e indicador de home. */
+.conteudo {
+  padding: 1.2rem max(1.4rem, env(safe-area-inset-right)) max(3rem, env(safe-area-inset-bottom))
+           max(1.4rem, env(safe-area-inset-left));
+}
+
+#area-avisos {
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+/* Instalado na tela de início, o app ocupa a tela toda sem barra do Safari. */
+@media (display-mode: standalone) {
+  .topo { padding-top: max(.8rem, env(safe-area-inset-top)); }
+}
+
+/* --------------------------------------------------------------------- */
+/* 17. Trilha de auditoria                                                */
+/* --------------------------------------------------------------------- */
+.aviso-integridade {
+  border: 1px solid var(--borda-forte);
+  border-left: 4px solid var(--verde);
+  border-radius: var(--raio);
+  background: rgba(74, 107, 87, .18);
+  padding: .7rem .9rem;
+  margin: .8rem 0;
+  font-size: .9rem;
+}
+
+/* Etiquetas de origem: cor apoia a leitura, mas o texto sozinho já basta —
+   quem não distingue as cores continua lendo "Operador" ou "Simulação". */
+[class*="etiqueta--origem-"] { margin-left: 0; }
+.etiqueta--origem-OPERADOR  { border-color: var(--salvia-clara); color: var(--salvia-clara); }
+.etiqueta--origem-GESTAO    { border-color: var(--aco-claro);    color: var(--aco-claro); }
+.etiqueta--origem-SIMULACAO { border-color: #6E9FB5;             color: #6E9FB5; }
+.etiqueta--origem-SISTEMA   { border-color: var(--aco);          color: var(--aco); }
+
+/* Losango que marca ação capaz de mexer em indicador já apurado. */
+.marca-sensivel { color: var(--ambar-texto); font-size: .8em; }
+
+.valor-antes  { color: var(--texto-suave); text-decoration: line-through; }
+.valor-depois { color: var(--verde); font-weight: 600; }
+
+.mono { font-family: var(--fonte-dados); font-size: .84rem; white-space: nowrap; }
+
+.filtros__campo--largo { min-width: 220px; flex: 1 1 220px; }
+
+/* A tabela da trilha é larga: a descrição pode quebrar, o resto não. */
+[data-rota="auditoria"] .tabela td { vertical-align: top; }
+[data-rota="auditoria"] .tabela td:nth-child(7) { min-width: 260px; white-space: normal; }
+
+@media (max-width: 900px) {
+  .filtros__campo--largo { flex-basis: 100%; }
+}
+
+/* --------------------------------------------------------------------- */
+/* 18. ACMP — sugestões e matriz de confusão                              */
+/* --------------------------------------------------------------------- */
+
+/* Bloco de sugestões no modal de motivo. Fica acima da árvore, mas sem
+   escondê-la: o operador que discorda precisa do caminho manual a um toque
+   de distância, senão a sugestão vira imposição. */
+.acmp {
+  border: 1px solid var(--borda-forte);
+  border-left: 3px solid var(--azul);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  padding: .6rem .7rem .7rem;
+  margin-bottom: .9rem;
+}
+
+.acmp__titulo {
+  margin: 0 0 .5rem;
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--texto-suave);
+}
+
+.acmp__nota { text-transform: none; letter-spacing: 0; font-style: italic; opacity: .8; }
+
+.acmp__opcao {
+  display: grid;
+  grid-template-columns: 3.4rem 1fr;
+  grid-template-areas: "prob nome" "prob evid";
+  gap: .1rem .6rem;
+  width: 100%;
+  text-align: left;
+  min-height: 56px;
+  padding: .5rem .6rem;
+  margin-bottom: .4rem;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--fundo-2);
+  color: var(--texto);
+  cursor: pointer;
+}
+
+.acmp__opcao:hover { border-color: var(--azul); }
+.acmp__opcao--ativa { border-color: var(--ambar); background: rgba(217, 123, 41, .16); }
+.acmp__opcao:focus-visible { outline: 2px solid var(--ambar); outline-offset: 2px; }
+
+.acmp__prob {
+  grid-area: prob;
+  align-self: center;
+  font-family: var(--fonte-dados);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--azul);
+  text-align: right;
+}
+
+.acmp__nome { grid-area: nome; font-weight: 600; }
+.acmp__categoria { display: block; font-weight: 400; font-size: .72rem; color: var(--texto-suave); }
+.acmp__evidencia { grid-area: evid; font-size: .74rem; color: var(--texto-suave); line-height: 1.35; }
+
+/* Matriz de confusão */
+.mc { font-family: var(--fonte-dados); font-size: .8rem; }
+.mc th, .mc td { text-align: center; padding: .35rem .4rem; }
+.mc__canto { text-align: left; font-size: .72rem; color: var(--texto-suave); white-space: nowrap; }
+.mc__linha { text-align: left; white-space: nowrap; font-weight: 500; font-family: var(--fonte-base); font-size: .78rem; }
+.mc__col { font-family: var(--fonte-base); font-size: .7rem; max-width: 92px; }
+.mc__col span { display: inline-block; line-height: 1.15; }
+.mc__celula { min-width: 46px; }
+.mc__celula--diagonal { font-weight: 700; }
+
+.lista-notas { margin: .4rem 0 0 1.1rem; padding: 0; font-size: .86rem; line-height: 1.5; }
+.lista-notas li { margin-bottom: .5rem; }
+
+@media (pointer: coarse) {
+  .acmp__opcao { min-height: 64px; }
+}
+
+/* --------------------------------------------------------------------- */
+/* 19. Assinaturas da marca DiFORP Orbis                                  */
+/* --------------------------------------------------------------------- */
+
+/* Filete semântico 6 / 2 / 1 / 3 — a proporção da paleta materializada.
+   Fica no topo absoluto da página, acima de qualquer conteúdo. */
+.filete-semantico { display: flex; height: 4px; width: 100%; }
+.filete-semantico span { display: block; height: 100%; }
+.filete-semantico__petroleo { flex: 6; background: var(--petroleo); }
+.filete-semantico__ambar    { flex: 2; background: var(--ambar); }
+.filete-semantico__salvia   { flex: 1; background: var(--salvia); }
+.filete-semantico__pedra    { flex: 3; background: var(--pedra); }
+
+/* Linha de trace sob o cabeçalho. */
+.trace { height: 22px; flex-shrink: 0; }
+.trace svg { display: block; width: 100%; height: 100%; }
+
+/* Malha de 44px sobre a superfície escura, como na capa do press kit.
+   Densidade baixíssima de propósito: dá textura de instrumento sem
+   competir com o dado. */
+.conteudo {
+  background-image:
+    linear-gradient(rgba(245, 244, 240, .022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 244, 240, .022) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* Rótulos de contexto em mono maiúsculo — a "voz do registro auditável". */
+.painel__titulo,
+.filtros__campo label,
+.kpi__rotulo {
+  font-family: var(--fonte-dados);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.painel__titulo { font-size: .74rem; font-weight: 500; color: var(--texto-suave); }
+.kpi__rotulo { font-size: .62rem; }
+.filtros__campo label { font-size: .6rem; }
+
+/* Valores numéricos com peso de instrumento. */
+.kpi__valor { font-family: var(--fonte-dados); font-weight: 500; letter-spacing: -.01em; }
+
+/* O painel ganha o filete da marca no topo, discreto, como o cartão de
+   visita do press kit tem na base. */
+.painel { position: relative; }
+.painel::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 34px;
+  height: 2px;
+  background: var(--ambar);
+  opacity: .75;
+}
+
+@media print {
+  .filete-semantico, .trace { display: none; }
+  .conteudo { background-image: none; }
+}
