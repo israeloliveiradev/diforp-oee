@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="24" fill="#082830"/>
+  <rect x="0" y="0" width="192" height="10" fill="#0E4A56"/>
+  <rect x="0" y="0" width="64" height="10" fill="#D97B29"/>
+  <rect x="64" y="0" width="64" height="10" fill="#7FA38A"/>
+  <text x="96" y="112" text-anchor="middle" font-family="Georgia, serif" font-size="42" fill="#E8EEF0">OEE</text>
+</svg>

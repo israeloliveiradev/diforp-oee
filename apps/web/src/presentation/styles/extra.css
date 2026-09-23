@@ -1,0 +1,187 @@
+/* Telas que a PoC não tinha (login JWT, chat RAG) + aliases da SPA inicial.
+   Não sobrescreve .kpi / .filtros / .tabela / .modal do styles.css. */
+.login-tela {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--fundo);
+}
+.login-card {
+  width: min(420px, 100%);
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-grande);
+  padding: 28px 24px;
+}
+.login-card .marca { margin-bottom: 12px; }
+.login-card h1 {
+  font-size: 1.15rem;
+  margin: 0 0 8px;
+}
+.login-card p { color: var(--texto-suave); margin: 0 0 16px; font-size: 0.9rem; }
+.login-card .rotulo-campo,
+.login-card label {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--texto-suave);
+}
+.login-card input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  background: var(--fundo);
+  color: var(--texto);
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio);
+  font-size: 1rem;
+}
+.login-card .botao { margin-top: 18px; width: 100%; min-height: 44px; }
+
+.chat-tela { display: flex; flex-direction: column; gap: 1.1rem; }
+.chat-composer {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) auto;
+  gap: .6rem;
+  align-items: end;
+}
+.chat-composer--depois {
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: .9rem;
+}
+.chat-campo {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  min-width: 0;
+}
+.chat-campo label {
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--texto-suave);
+}
+.chat-campo select,
+.chat-campo input,
+.chat-enviar {
+  min-height: 44px;
+}
+.chat-enviar {
+  width: auto;
+  white-space: nowrap;
+  padding-inline: 1.1rem;
+}
+.chat-mensagens {
+  display: flex;
+  flex-direction: column;
+  gap: .7rem;
+  min-height: 220px;
+}
+.chat-bolha {
+  max-width: min(720px, 100%);
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-grande);
+  padding: .75rem .9rem;
+}
+.chat-bolha p { margin: 0; }
+.chat-bolha__papel {
+  font-size: .68rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+  margin-bottom: .35rem;
+}
+.chat-bolha--user {
+  align-self: flex-end;
+  border-color: var(--borda-forte);
+}
+.chat-bolha--assistente { align-self: flex-start; }
+.chat-sugestoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-top: .85rem;
+}
+.chat-sugestao {
+  min-height: 44px;
+  padding: .45rem .8rem;
+  text-align: left;
+  background: var(--fundo);
+  color: var(--texto);
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio);
+  font-size: .92rem;
+  cursor: pointer;
+}
+.chat-sugestao:disabled { opacity: .45; cursor: not-allowed; }
+.chat-sugestao:hover:not(:disabled) { border-color: var(--ambar); }
+.chat-resposta__titulo {
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin: 0 0 .45rem;
+}
+.chat-passos {
+  margin: 0 0 .5rem 1.15rem;
+  padding: 0;
+}
+.chat-passos li {
+  margin: .35rem 0;
+  line-height: 1.4;
+}
+.chat-resposta__nota {
+  margin: .35rem 0 0;
+  color: var(--texto-suave);
+  font-size: .92rem;
+}
+.chat-fonte {
+  display: inline-block;
+  margin-top: .55rem;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--texto-suave);
+  font-size: .78rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.chat-citacao {
+  font-size: 0.82rem;
+  color: var(--texto-suave);
+  border-left: 2px solid var(--aco);
+  padding-left: 10px;
+  margin-top: 8px;
+}
+@media (max-width: 760px) {
+  .chat-composer { grid-template-columns: 1fr; }
+  .chat-enviar { width: 100%; }
+}
+.lateral__sessao { margin-top: 8px; font-size: 0.72rem; color: var(--texto-fraco); }
+.etiqueta--alerta { border-color: var(--alerta, #DC6C57); color: var(--alerta, #DC6C57); }
+
+/* Aliases: se alguma tela antiga ainda usa estas classes, o layout não some. */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: .7rem;
+  margin-bottom: 1.1rem;
+}
+.op-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: .6rem;
+}
+.aviso-area {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 200;
+  max-width: min(380px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
