@@ -1,5 +1,7 @@
 # OEE DiFORP — chão de fábrica, indicadores e manuais no posto
 
+Pasta e repositório: **`diforp-oee`**. Na VPS o clone vai para `/opt/diforp-oee`.
+
 Plataforma de **OEE** (Overall Equipment Effectiveness) da DiFORP. O operador aponta no posto; a gestão vê disponibilidade, performance, qualidade, paradas e o que pede ação. Os manuais da máquina viram passo a passo na tela **O que fazer**.
 
 Nada da PoC em `legacy/` foi descartado: operação, dashboards, ACMP, insights, auditoria, cadastros, simulador, import/export e a identidade visual (DiFORP) continuam. A diferença é que o cálculo e o dado moram na API e no PostgreSQL, não no `localStorage` do iPad.
@@ -155,8 +157,8 @@ Instala Docker Engine + Compose plugin.
 Neste momento o remoto Git **ainda não está definido neste workspace** (de propósito: o remoto anterior não é o da VPS). Depois de criar o repositório certo:
 
 ```bash
-git clone <URL-DO-REPOSITORIO-CORRETO> /opt/oee
-cd /opt/oee
+git clone <URL-DO-REPOSITORIO-CORRETO> /opt/diforp-oee
+cd /opt/diforp-oee
 ```
 
 Alternativa sem Git: `scp`/`rsync` da pasta do projeto (sem `node_modules`, sem `.env`).
@@ -200,7 +202,7 @@ Status esperado em **Manuais**: `pronto`, com páginas e chunks > 0.
 ### 5. Atualizar a aplicação
 
 ```bash
-cd /opt/oee
+cd /opt/diforp-oee
 git pull
 docker compose up -d --build
 ```

@@ -1,3 +1,5 @@
+name: diforp-oee
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
