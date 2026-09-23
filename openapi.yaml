@@ -1,0 +1,124 @@
+openapi: 3.0.3
+info:
+  title: OEE API
+  version: 2.0.0
+  description: |
+    Contrato da plataforma OEE (Clean Architecture).
+    A fonte viva é gerada pelo FastAPI em `/openapi.json`.
+servers:
+  - url: /api
+tags:
+  - name: auth
+  - name: cadastros
+  - name: operacao
+  - name: indicadores
+  - name: paradas
+  - name: acmp
+  - name: insights
+  - name: auditoria
+  - name: simulacao
+  - name: manuais
+  - name: chat
+  - name: config
+paths:
+  /health:
+    get:
+      summary: Healthcheck
+      responses:
+        "200": { description: ok }
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Login JWT (papéis operador | gestao)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, senha]
+              properties:
+                login: { type: string }
+                senha: { type: string }
+      responses:
+        "200": { description: token }
+  /indicadores:
+    get:
+      tags: [indicadores]
+      summary: OEE, Pareto, série temporal e produção por máquina
+      parameters:
+        - in: query
+          name: periodo
+          schema: { type: string, enum: [1h, 8h, 24h, 7d, 30d] }
+        - in: query
+          name: maquina_id
+          schema: { type: string }
+      responses:
+        "200": { description: dashboard }
+  /operacao/paradas:
+    post:
+      tags: [operacao, paradas]
+      summary: Registrar parada (auditoria + ACMP opcional no cliente)
+      responses:
+        "200": { description: estado atualizado }
+  /acmp/sugestoes:
+    get:
+      tags: [acmp]
+      summary: Top-3 motivos com evidências e SHAP
+      parameters:
+        - in: query
+          name: maquina_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: lista de sugestões }
+  /acmp/desfecho:
+    post:
+      tags: [acmp]
+      summary: Aceite ou ignore da sugestão (SUGESTAO_ACEITA / IGNORADA)
+      responses:
+        "200": { description: ok }
+  /manuais:
+    get:
+      tags: [manuais]
+      summary: Lista manuais indexados
+      responses:
+        "200": { description: lista }
+    post:
+      tags: [manuais]
+      summary: Upload PDF para ingestão RAG
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                titulo: { type: string }
+                maquina_id: { type: string }
+                arquivo: { type: string, format: binary }
+      responses:
+        "200": { description: id do manual }
+  /chat/consultar:
+    post:
+      tags: [chat]
+      summary: Consulta RAG (Gemini + citações). Não inventa procedimento.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pergunta]
+              properties:
+                pergunta: { type: string }
+                maquina_id: { type: string }
+      responses:
+        "200":
+          description: resposta com citacoes
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []
