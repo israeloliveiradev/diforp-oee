@@ -9,12 +9,60 @@ export function setToken(t: string | null) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+const FILA_KEY = "oee.fila";
+
+type ItemFila = { id: string; path: string; body: string };
+
+function lerFila(): ItemFila[] {
+  try {
+    const bruto = JSON.parse(localStorage.getItem(FILA_KEY) || "[]");
+    return Array.isArray(bruto) ? bruto : [];
+  } catch {
+    return [];
+  }
+}
+
+async function drenarFila() {
+  const fila = lerFila();
+  if (!fila.length) return;
+  const restam: ItemFila[] = [];
+  for (const item of fila) {
+    try {
+      const headers = new Headers();
+      headers.set("Content-Type", "application/json");
+      headers.set("Idempotency-Key", item.id);
+      const tok = getToken();
+      if (tok) headers.set("Authorization", `Bearer ${tok}`);
+      const res = await fetch(`/api${item.path}`, { method: "POST", headers, body: item.body });
+      if (!res.ok && res.status !== 400) restam.push(item);
+    } catch {
+      restam.push(item);
+      break;
+    }
+  }
+  localStorage.setItem(FILA_KEY, JSON.stringify(restam));
+}
+
 async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (!(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   const tok = getToken();
   if (tok) headers.set("Authorization", `Bearer ${tok}`);
-  const res = await fetch(`/api${path}`, { ...init, headers });
+  const posto = (init.method || "GET") === "POST" && path.startsWith("/operacao/");
+  if (posto && !headers.has("Idempotency-Key")) headers.set("Idempotency-Key", crypto.randomUUID());
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, { ...init, headers });
+  } catch (err) {
+    if (posto && typeof init.body === "string") {
+      const fila = lerFila();
+      fila.push({ id: headers.get("Idempotency-Key") || crypto.randomUUID(), path, body: init.body });
+      localStorage.setItem(FILA_KEY, JSON.stringify(fila));
+      return { offline: true } as T;
+    }
+    throw err;
+  }
+  if (posto) void drenarFila();
   if (res.status === 401) {
     setToken(null);
     if (!path.startsWith("/auth/login")) window.location.hash = "#/login";
@@ -49,7 +97,13 @@ async function downloadAuth(path: string, nome: string) {
 }
 
 export const api = {
-  login: (login: string, senha: string) => req<{ access_token: string; papel: string; nome: string }>("/auth/login", { method: "POST", body: JSON.stringify({ login, senha }) }),
+  login: (login: string, senha: string) =>
+    req<{ access_token: string; papel: string; nome: string; planta_id?: string | null }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ login, senha }),
+    }),
+  assumirPosto: (body: { maquina_id: string; matricula: string }) => req("/operacao/operador", { method: "POST", body: JSON.stringify(body) }),
+  fecharTurno: (body: { planta_id: string; nota?: string }) => req("/turnos/fechar", { method: "POST", body: JSON.stringify(body) }),
   me: () => req("/auth/me"),
   catalogo: () => req<any>("/catalogo"),
   dataset: (filtro?: { maquina_id?: string; desde?: number }) => {

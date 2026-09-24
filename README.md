@@ -14,15 +14,15 @@ Este repositório é o que sobe na VPS com Docker Compose.
 
 | Quem | O que usa |
 | --- | --- |
-| **Operador** (`operador` / `operador`) | Operação (ordem, produção, parada, refugo, retrabalho), **O que fazer** (procedimento do posto), Configurações só para leitura do essencial |
-| **Gestão** (`gestao` / `gestao`) | Visão geral, máquinas, produção, paradas, qualidade, performance, **O que olhar**, ACMP, Manuais, Auditoria, Cadastros, Configurações |
+| **Operador** (`operador` / `operador`) | Operação (ordem, produção, refugo de peça já contada, parada, crachá, passagem de turno), **O que fazer** (fato do posto e procedimento do manual) |
+| **Gestão** (`gestao` / `gestao`) | Visão geral do turno, seis perdas, alertas, máquinas, produção, paradas, qualidade, performance, **O que olhar**, ACMP, Manuais, Auditoria, Cadastros, Configurações, fechamento do turno |
 
 Telas (HashRouter, mesmo contrato da PoC):
 
 - **Operação** — estado da máquina, abrir/fechar ordem, apontar peça, parada com motivo, solicitar manutenção
 - **Visão geral / Máquinas / Produção / Paradas / Qualidade / Performance** — OEE e recortes com filtros (planta, área, linha, máquina, produto, ordem, turno, operador)
 - **O que olhar** — desvios do período com uma ação (“Faça agora”)
-- **O que fazer** — escolhe a máquina, toca no problema, recebe passos do manual (Gemini + pgvector). Nada liga nem para a máquina
+- **O que fazer** — ordem, falha e produção saem do banco na hora. O passo a passo do manual (Gemini + pgvector) entra quando a pergunta pede procedimento. Nada liga nem para a máquina
 - **Manuais** — gestão envia PDF, reprocessa ou exclui; o worker indexa
 - **ACMP** — sugere motivo de parada (LightGBM + SHAP; Naive Bayes se houver poucas amostras)
 - **Auditoria / Cadastros / Configurações** — trilha, ISA-95, simulador, import/export, seed de demonstração
@@ -57,6 +57,7 @@ O browser **não** recalcula OEE. Ele pede `/indicadores` e `/insights`.
 | `apps/web` | SPA Vite/React 18, PWA |
 | `infra/nginx` | Proxy `/api` → API, corpo até 40 MB (PDF) |
 | `infra/scripts/vps-bootstrap.sh` | Docker na VPS Ubuntu/Debian |
+| `infra/scripts/backup-postgres.sh` | `pg_dump` do Postgres e o comando de restauração |
 | `docs/manuais` | 10 PDFs de posto + gerador + script de reindexação |
 | `legacy/` | PoC HTML/JS — especificação de negócio. Não editar como produto |
 | `openapi.yaml` | Contrato resumido; a fonte viva é `http://<host>/openapi.json` |

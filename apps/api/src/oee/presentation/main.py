@@ -29,7 +29,7 @@ from oee.domain.audit import diferencas, verificar_integridade
 from oee.domain.catalog import AUDIT_ACOES, AUDIT_CATEGORIAS, AUDIT_ORIGENS, CAUSAS_REFUGO, ESTADOS, ORDEM_ESTADOS, PERFIS
 from oee.domain.demo import gerar_demo
 from oee.domain.ids import novo_id
-from oee.infrastructure.auth import criar_token, verificar_senha
+from oee.infrastructure.auth import criar_token, ler_token, verificar_senha
 from oee.infrastructure.db import models as m
 from oee.infrastructure.db.repositories import limpar_operacional, persistir_dataset, snapshot
 from oee.infrastructure.ml.pipeline import inferir, treinar_lightgbm
@@ -40,6 +40,8 @@ from oee.presentation.schemas import (
     AcmpDesfechoIn,
     ChatIn,
     ConfigIn,
+    FechamentoIn,
+    OperadorPostoIn,
     SinalIn,
     EstadoIn,
     LoginIn,
@@ -100,7 +102,14 @@ def login(body: LoginIn, db: Session = Depends(db_dep)):
     if not user or not verificar_senha(body.senha, user.senha_hash):
         raise HTTPException(401, "Credenciais inválidas")
     token = criar_token(user.id, user.papel, user.nome)
-    return {"access_token": token, "token_type": "bearer", "papel": user.papel, "nome": user.nome, "sub": user.id}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "papel": user.papel,
+        "nome": user.nome,
+        "sub": user.id,
+        "planta_id": user.planta_id,
+    }
 
 
 @app.get("/auth/me")
@@ -238,9 +247,10 @@ def excluir_cadastro(entidade: str, item_id: str, db: Session = Depends(db_dep),
 
 # ----- Operação -----
 @app.post("/operacao/estado")
-def api_estado(body: EstadoIn, db: Session = Depends(db_dep), user: dict = Depends(usuario_atual)):
+def api_estado(body: EstadoIn, request: Request, db: Session = Depends(db_dep), user: dict = Depends(usuario_atual)):
     origem = "OPERADOR" if user.get("papel") == "operador" else "GESTAO"
-    return op.mudar_estado(db, body.maquina_id, body.estado, user.get("nome"), origem, body.motivo_id, body.comentario, body.acao)
+    chave = request.headers.get("idempotency-key")
+    return op.mudar_estado(db, body.maquina_id, body.estado, user.get("nome"), origem, body.motivo_id, body.comentario, body.acao, chave=chave)
 
 
 @app.post("/operacao/paradas")
@@ -253,18 +263,44 @@ def api_parada(body: ParadaIn, db: Session = Depends(db_dep), user: dict = Depen
 
 
 @app.post("/operacao/sinal")
-def api_sinal(body: SinalIn, db: Session = Depends(db_dep), user: dict = Depends(usuario_atual)):
+def api_sinal(body: SinalIn, request: Request, db: Session = Depends(db_dep)):
+    maq = db.get(m.Maquina, body.maquina_id)
+    if not maq:
+        raise HTTPException(404, "Máquina não encontrada")
+    token_maq = request.headers.get("x-maquina-token")
+    if maq.sinal_token:
+        if not token_maq or token_maq != maq.sinal_token:
+            raise HTTPException(401, "Token da máquina inválido")
+        usuario = "clp"
+    else:
+        auth = request.headers.get("authorization") or ""
+        if not auth.lower().startswith("bearer "):
+            raise HTTPException(401, "Não autenticado")
+        try:
+            usuario = ler_token(auth.split(" ", 1)[1]).get("nome") or "sinal"
+        except ValueError:
+            raise HTTPException(401, "Token inválido")
     try:
-        return op.registrar_sinal(db, body.maquina_id, body.produzindo, user.get("nome") or "sinal", "SINAL")
+        return op.registrar_sinal(db, body.maquina_id, body.produzindo, usuario, "SINAL")
     except ValueError as e:
         raise HTTPException(400, str(e))
 
 
 @app.post("/operacao/producao")
-def api_producao(body: ProducaoIn, db: Session = Depends(db_dep), user: dict = Depends(usuario_atual)):
+def api_producao(body: ProducaoIn, request: Request, db: Session = Depends(db_dep), user: dict = Depends(usuario_atual)):
     origem = "OPERADOR" if user.get("papel") == "operador" else "GESTAO"
     try:
-        return op.apontar_producao(db, body.maquina_id, body.qtd_total, body.qtd_refugo, body.qtd_retrabalho, body.causa_refugo, user.get("nome"), origem)
+        return op.apontar_producao(
+            db,
+            body.maquina_id,
+            body.qtd_total,
+            body.qtd_refugo,
+            body.qtd_retrabalho,
+            body.causa_refugo,
+            user.get("nome"),
+            origem,
+            chave=request.headers.get("idempotency-key"),
+        )
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -300,6 +336,30 @@ def api_fim_ordem(maquina_id: str, db: Session = Depends(db_dep), user: dict = D
 @app.post("/operacao/observacoes")
 def api_obs(body: ObservacaoIn, db: Session = Depends(db_dep), user: dict = Depends(usuario_atual)):
     return op.registrar_observacao(db, body.maquina_id, body.texto, user.get("nome"))
+
+
+@app.post("/operacao/operador")
+def api_operador(body: OperadorPostoIn, db: Session = Depends(db_dep), user: dict = Depends(usuario_atual)):
+    try:
+        return op.assumir_posto(db, body.maquina_id, body.matricula, user.get("nome") or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/turnos/fechar")
+def api_fechar_turno(body: FechamentoIn, db: Session = Depends(db_dep), user: dict = Depends(exigir_gestao)):
+    try:
+        return op.fechar_turno(db, body.planta_id, user.get("nome") or "", body.nota)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/turnos/reabrir/{fechamento_id}")
+def api_reabrir_turno(fechamento_id: str, db: Session = Depends(db_dep), user: dict = Depends(exigir_gestao)):
+    try:
+        return op.reabrir_turno(db, fechamento_id, user.get("nome") or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 # ----- Indicadores -----
@@ -358,7 +418,7 @@ def api_indicadores(
         periodo, data_inicio, data_fim, planta_id, area_id, linha_id, maquina_id, produto_id, ordem_id, turno_id, operador_id
     )
     ini, _fim = ind.janela(filtros, agora)
-    ds = snapshot(db, maquina_id=maquina_id, desde_ms=ini if maquina_id else None, sem_auditoria=True)
+    ds = snapshot(db, maquina_id=maquina_id, desde_ms=ini, sem_auditoria=True)
     return ind.dashboard(ds, filtros, agora)
 
 
@@ -430,12 +490,12 @@ def api_insights(
     db: Session = Depends(db_dep),
     user: dict = Depends(usuario_atual),
 ):
-    ds = snapshot(db)
     agora = int(time.time() * 1000)
     filtros = _filtros(
         periodo, data_inicio, data_fim, planta_id, area_id, linha_id, maquina_id, produto_id, ordem_id, turno_id, operador_id
     )
     ini, fim = ind.janela(filtros, agora)
+    ds = snapshot(db, maquina_id=maquina_id, desde_ms=ini, sem_auditoria=True)
     maqs = ind.filtrar_maquinas(ds, filtros)
     evs = ind._eventos_maquinas(ds, [m["id"] for m in maqs], ind.enriquecer_filtros(ds, filtros))
     return insights_dom.gerar(
@@ -516,6 +576,10 @@ def api_get_config(db: Session = Depends(db_dep), user: dict = Depends(usuario_a
         "simulacao_ativa": cfg.simulacao_ativa,
         "intervalo_simulacao_seg": cfg.intervalo_simulacao_seg,
         "limite_microparada_seg": cfg.limite_microparada_seg,
+        "parada_longa_min": cfg.parada_longa_min or 15,
+        "sem_peca_min": cfg.sem_peca_min or 20,
+        "retrabalho_na_qualidade": bool(cfg.retrabalho_na_qualidade),
+        "alerta_webhook_url": cfg.alerta_webhook_url or "",
         "auditar_simulacao": cfg.auditar_simulacao,
         "acmp_ativo": cfg.acmp_ativo,
     }
@@ -734,8 +798,19 @@ def api_acmp_sug(
     maq = next((m_ for m_ in ds["maquinas"] if m_["id"] == maquina_id), None)
     if not maq:
         raise HTTPException(404, "Máquina não encontrada")
+    if duracao_seg is None:
+        from oee.infrastructure.acmp_cache import ler
+
+        guardado = ler(maquina_id)
+        if guardado is not None:
+            return guardado
     ctx = acmp_dom.contexto_atual(ds, maq, {"duracao_seg": duracao_seg})
-    return inferir(ds, ctx, com_duracao=duracao_seg is not None)
+    sugestoes = inferir(ds, ctx, com_duracao=duracao_seg is not None)
+    if duracao_seg is None:
+        from oee.infrastructure.acmp_cache import guardar
+
+        guardar(maquina_id, sugestoes)
+    return sugestoes
 
 
 @app.get("/acmp/avaliacao")

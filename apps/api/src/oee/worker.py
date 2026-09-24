@@ -52,6 +52,24 @@ def loop() -> None:
                 log.info("processando manual %s", man_id)
                 processar_manual(db, man_id)
             agora = time.time()
+            if cfg and cfg.acmp_ativo is not False and agora - getattr(loop, "acmp_em", 0) > 20:
+                try:
+                    from oee.domain import acmp as acmp_dom
+                    from oee.infrastructure.acmp_cache import guardar
+                    from oee.infrastructure.ml.pipeline import inferir
+
+                    maqs = list(db.scalars(select(m.Maquina).where(m.Maquina.ativa.is_(True))))
+                    if maqs:
+                        alvo = maqs[getattr(loop, "acmp_i", 0) % len(maqs)]
+                        loop.acmp_i = getattr(loop, "acmp_i", 0) + 1
+                        ds_acmp = snapshot(db, maquina_id=alvo.id, desde_ms=int(agora * 1000) - 7 * 24 * 3600 * 1000, sem_auditoria=True)
+                        ficha = next((x for x in ds_acmp["maquinas"] if x["id"] == alvo.id), None)
+                        if ficha:
+                            guardar(alvo.id, inferir(ds_acmp, acmp_dom.contexto_atual(ds_acmp, ficha, {}), com_duracao=False))
+                    loop.acmp_em = agora
+                except Exception:
+                    log.exception("pré-cálculo do ACMP falhou")
+                    loop.acmp_em = agora
             if agora - ultimo_treino > 1800:
                 ds = snapshot(db)
                 if len(ds.get("eventos_parada") or []) >= 60:

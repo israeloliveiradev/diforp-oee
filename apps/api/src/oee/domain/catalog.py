@@ -254,6 +254,9 @@ AUDIT_ACOES = {
     "MANUAL_REPROCESSADO": {"rotulo": "Manual reprocessado", "categoria": "MANUAL"},
     "MANUAL_EXCLUIDO": {"rotulo": "Manual excluído", "categoria": "MANUAL"},
     "CHAT_CONSULTADO": {"rotulo": "Manual consultado", "categoria": "MANUAL"},
+    "OPERADOR_NO_POSTO": {"rotulo": "Operador assumiu o posto", "categoria": "OPERACAO"},
+    "TURNO_FECHADO": {"rotulo": "Turno fechado", "categoria": "OPERACAO", "sensivel": True},
+    "TURNO_REABERTO": {"rotulo": "Turno reaberto", "categoria": "OPERACAO", "sensivel": True},
 }
 
 CONFIG_PADRAO = {

@@ -147,6 +147,9 @@ export const AUDIT_ACOES: Record<string, { rotulo: string }> = {
   MANUAL_REPROCESSADO: { rotulo: "Manual reprocessado" },
   MANUAL_EXCLUIDO: { rotulo: "Manual excluído" },
   CHAT_CONSULTADO: { rotulo: "Manual consultado" },
+  OPERADOR_NO_POSTO: { rotulo: "Operador assumiu o posto" },
+  TURNO_FECHADO: { rotulo: "Turno fechado" },
+  TURNO_REABERTO: { rotulo: "Turno reaberto" },
 };
 
 /** Perguntas prontas do posto — sem jargão, uma ação por toque. */

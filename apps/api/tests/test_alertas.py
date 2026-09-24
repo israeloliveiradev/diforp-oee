@@ -16,3 +16,9 @@ def test_refugo_acima_da_meta_e_silencio_quando_esta_no_ritmo():
     assert alto[0]["tipo"] == "refugo"
     assert avaliar_posto("Torno CNC 02", "MQ-2", "PRODUZINDO", 60, 100, 1, 0.02) == []
     assert avaliar_posto("Torno CNC 02", "MQ-2", "PARADA_PLANEJADA", 50 * 60, 0, 0, 0.02) == []
+
+
+def test_setup_acima_da_meta():
+    itens = avaliar_posto("Prensa 01", "MQ-4", "SETUP", 40 * 60, 0, 0, 0.02, meta_setup_min=20)
+    assert itens[0]["tipo"] == "setup_longo"
+    assert avaliar_posto("Prensa 01", "MQ-4", "SETUP", 10 * 60, 0, 0, 0.02, meta_setup_min=20) == []

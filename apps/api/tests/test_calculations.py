@@ -39,6 +39,20 @@ def test_oee_basico():
     assert faixa_oee(0.5, 0.75) == "critico"
 
 
+def test_retrabalho_so_sai_do_aprovado_quando_a_configuracao_pede():
+    base = {
+        "eventos_estado": [{"estado": "PRODUZINDO", "inicio": 0, "fim": 3600_000}],
+        "eventos_producao": [{"ts": 1000, "qtd_total": 10, "qtd_refugo": 0, "qtd_retrabalho": 2}],
+        "inicio": 0,
+        "fim": 3600_000,
+        "ciclo_ideal_seg": 30,
+    }
+    sem = calcular_oee({**base, "config": {}})
+    com = calcular_oee({**base, "config": {"retrabalho_na_qualidade": True}})
+    assert sem["producao_aprovada"] == 10
+    assert com["producao_aprovada"] == 8
+
+
 def test_divisao_protegida():
     r = calcular_oee(
         {

@@ -127,9 +127,10 @@ flowchart TD
   P[Pergunta do operador] --> C{O que ela pede?}
   C -->|status, última parada, produção, OEE, meta, turno| B[Lê o posto no PostgreSQL]
   C -->|como fazer, alarme, passo, posso| M[Busca trechos no manual]
-  C -->|os dois| BM[Lê o posto e o manual]
-  B --> R[Resposta na hora, com o texto do banco]
+  C -->|os dois| BM[Fato do posto na hora e, depois, o passo do manual]
+  B --> R[Resposta na hora, só o fato pedido]
   M --> G2[Gemini escreve no máximo 5 passos]
+  BM --> R
   BM --> G2
   G2 --> R
 ```
@@ -137,15 +138,20 @@ flowchart TD
 **Pergunta de posto** (status, última parada, quanto produziu, OEE, meta, ordem, operador, turno):
 
 1. A API localiza a máquina pelo seletor ou pelo nome escrito na frase.
-2. Lê no banco, sem carregar a fábrica inteira: estado neste turno, operador, ordem aberta, peças do turno (produzidas, aprovadas, refugo, retrabalho, meta), OEE do turno, comparação com o turno anterior, última peça e as três paradas mais recentes.
+2. Lê no banco só o fato pedido: ordem aberta, últimas ordens, última falha, estado, operador, produção, OEE ou turno anterior.
 3. Esse texto volta direto para a tela. O modelo não reescreve. Sem `GEMINI_API_KEY`, o posto continua respondendo.
+
+**Pergunta que pede os dois** (falta de material, alarme com "o que fazer"):
+
+1. O fato do posto sai na hora.
+2. O passo do manual entra na mesma resposta, se o PDF tiver o trecho. Se o modelo falhar, o fato permanece.
 
 **Pergunta de procedimento** (o que fazer, alarme, troca, passo):
 
 1. A pergunta vira um vetor no Gemini (`gemini-embedding-001`, 768 dimensões).
 2. O pgvector devolve os trechos mais próximos dos PDFs daquela máquina, mais os manuais gerais da planta.
-3. O Gemini monta até cinco ações e uma linha sobre chamar ou não a manutenção.
-4. Se o manual não tiver o passo, a resposta pede o supervisor. Ela não inventa torque, alarme nem peça.
+3. O Gemini monta até cinco ações e uma linha sobre chamar ou não a manutenção. A mesma pergunta, com o mesmo PDF, fica guardada até o manual mudar.
+4. Se o manual não tiver o passo, a resposta pede o supervisor. Ela não inventa torque, alarme nem peça. Pergunta de ordem, falha ou produção não cai nesse caminho.
 
 O chat não liga, não desliga e não aponta na máquina. Ele lê e orienta.
 
@@ -163,60 +169,43 @@ O chat não liga, não desliga e não aponta na máquina. Ele lê e orienta.
 - A Operação separa o relógio do cartão. O cronômetro anda a cada segundo. Os indicadores do turno atualizam a cada 15 segundos, e o número anterior permanece na tela enquanto a resposta nova chega. Produzido, aprovado, rejeitado e a meta saem dos apontamentos da máquina, não de uma consulta que se desfaz a cada segundo.
 - "Registrar parada" abre o formulário na hora. A sugestão do ACMP entra no campo depois, sem segurar o modal.
 - A Operação pede o conjunto só da máquina escolhida. Indicadores e sugestão de parada também montam só essa máquina, na janela pedida, sem a trilha de auditoria.
-- O chat de posto devolve na hora, direto do banco, o estado, a produção, o OEE do turno, se a meta foi batida, a última peça e a comparação com o turno anterior. O modelo só entra na pergunta de procedimento do manual.
+- O chat de posto responde só o que foi perguntado: ordem, últimas ordens, última falha, estado, produção ou OEE. Não despeja o bloco inteiro e não manda "quando foi a falha" para o manual.
 - No servidor, as senhas de demonstração, o `JWT_SECRET` e a senha do Postgres deixam de ser os valores de exemplo. O ambiente local de desenvolvimento continua com os padrões do `.env`.
 - Sem `GEMINI_API_KEY`, o passo a passo do manual não responde. O status, o OEE e as paradas do posto continuam saindo direto do banco.
 - Na virada (06:00, 14:00 e 22:00, horário de São Paulo) o estado aberto fecha e reabre no turno novo. O relógio do posto conta o tempo neste turno. O OEE não herda a hora de ontem.
 - A visão geral da gestão lista o que pede ação: parada não planejada passando de 15 minutos, máquina produzindo há 20 minutos sem peça no turno, e refugo acima da meta.
 - A máquina pode avisar `POST /operacao/sinal` quando para ou volta a produzir. A parada chega sem motivo. O posto mostra o aviso e o operador confirma a causa. O modelo continua sem comandar o equipamento.
+- A produção da Operação é da ordem aberta. Sem ordem, os cartões zeram. A ordem nova não herda a peça da anterior.
+- Refugo de peça já contada: a opção "destas peças já estavam no produzido" grava quantidade total zero e refugo igual à quantidade. O aprovado cai e o produzido não sobe.
+- Produzindo além do limite sem peça, a Operação avisa no posto e oferece registrar produção ou Falta de material.
+- Ao voltar a produzir antes do limite de microparada, a parada fechada vira microparada. O motivo não é exigido de novo.
+- A passagem de turno registra peças, refugo, parada aberta, se a meta fecha e a nota para o próximo operador.
+- O crachá (matrícula) grava quem está na máquina. O apontamento seguinte usa esse operador. O login compartilhado continua.
+- A meta da ordem diz se, neste ritmo, fecha e a que horas, ou se não fecha.
+- A visão geral mostra as seis perdas do período: parada, setup, microparada, ciclo lento, refugo e retrabalho.
+- Setup acima da meta de minutos entra no "Para agir agora", no lugar da parada longa genérica.
+- Retrabalho só sai do aprovado se a configuração "Retrabalho conta como perda de qualidade" estiver marcada.
+- O andon usa o OEE do turno atual, o mesmo relógio da Operação. Os gráficos continuam no período do filtro.
+- "Vi, ocultar 1 h" silencia o alerta neste navegador. Não apaga a condição.
+- Parada longa e tempo sem peça têm minuto na configuração e, se preenchido, um minuto próprio na linha.
+- Se a configuração tiver um endereço de aviso, o alerta crítico é enviado para lá, no máximo uma vez por hora e por máquina.
+- O filtro da gestão abre na planta salva do usuário, ou na primeira planta do cadastro.
+- "Fechar o turno desta planta" trava o apontamento do operador naquele intervalo. A gestão ainda ajusta, e a trilha registra. Reabrir existe em `POST /turnos/reabrir/{id}`.
+- Com token na máquina, `POST /operacao/sinal` exige o cabeçalho `X-Maquina-Token`. Sem token, o simulador segue com o usuário logado. Pulso repetido de parada não abre outra parada.
+- O worker guarda o top 3 de motivo da máquina. A tela lê esse cache antes de recalcular.
+- Indicadores e insights da gestão carregam a janela pedida, não o histórico inteiro.
+- `infra/scripts/backup-postgres.sh` gera o `pg_dump` e imprime o comando de restauração. A restauração não foi executada no banco ao vivo.
+- O tablet guarda o POST de operação quando a rede cai e reenvia com a mesma chave. A API não grava a peça duas vezes.
 
-## Possíveis melhorias
+## O que ainda falta no chão
 
-A aplicação já serve para um piloto: o operador aponta, o turno não herda a hora de ontem, o chat de posto responde na hora e a gestão vê o que está torto. O que falta é o que faz esse número aguentar um mês de fábrica sem alguém interpretando o cartão no ouvido.
-
-### No posto, para o apontamento não mentir
-
-- **Refugo de peça já contada.** Registrar refugo soma a quantidade em Produzido e em Rejeitado. Isso está certo quando o lote ruim é novo. Se o operador já lançou 25 boas e depois descobre que 2 daquelas 25 saíram ruins, o segundo lançamento vira 27 produzidas. Falta um apontamento "destas, tantas são refugo", que só move peça de aprovado para rejeitado.
-- **O aviso "sem peça" na própria máquina.** Hoje ele aparece na visão geral. Quem está no torno não vê. A Operação deve dizer, no posto, "produzindo há 20 minutos sem peça" e oferecer os dois caminhos: lançar a produção ou registrar Falta de material.
-- **Microparada sozinha.** A regra já existe: até 5 minutos, com a máquina de volta, é microparada. A tela ainda trata toda parada como parada cheia. Ao finalizar antes do limite, o motivo pode ser opcional e o estado vira microparada.
-- **Passagem de turno.** No fim do turno, uma folha curta: peças, refugo, parada ainda aberta, meta batida ou não, e o que o próximo operador precisa saber. Hoje isso está espalhado no chat e nos cartões.
-- **Quem está no posto.** O login `operador` é um só. O nome na máquina pode ser outro. O crachá do operador deveria abrir a sessão e gravar o apontamento nesse nome.
-
-### No número, para a gestão decidir
-
-- **Projeção da meta.** O cartão mostra 35 de 583. Falta a frase "neste ritmo não fecha" ou "fecha às 21:10". Sem isso a meta é um desenho, não uma decisão.
-- **Seis grandes perdas.** Disponibilidade, performance e qualidade estão na tela. As perdas (parada, setup, microparada, ciclo lento, refugo, retrabalho) ainda não têm uma vista única. É dali que sai o plano da semana.
-- **Setup acima do tempo combinado.** A configuração já tem meta de setup em minutos. Não vira alerta. Setup de 40 minutos com meta de 20 deve aparecer junto com a parada longa.
-- **Retrabalho na qualidade.** Hoje o retrabalho não tira peça do aprovado. Algumas plantas contam retrabalho como perda de qualidade. A escolha precisa estar na configuração, não escondida na fórmula.
-- **Andon do turno vivo.** O cartão de estado na visão geral usa o OEE do filtro (24 h, 7 dias). Ao lado, o relógio é de agora. Os dois relógios diferentes confundem. O andon deve usar o mesmo turno da Operação.
-
-### Na gestão, para o alerta virar ação
-
-- **Ciência do alerta.** Os cartões ficam na tela enquanto a condição durar. Não há "eu vi", responsável, nem silêncio por uma hora. Quatro máquinas iguais o turno inteiro viram ruído.
-- **Limiar da planta.** Quinze minutos de parada, vinte sem peça e 2% de refugo estão no código ou numa meta global. Linha de injeção e torno não têm o mesmo limite.
-- **Aviso fora da página.** O crítico só existe se alguém estiver com a visão geral aberta. Parada longa e refugo alto precisam chegar numa mensagem, para o supervisor que está no chão.
-- **Minha planta primeiro.** O cadastro já tem Planta Sul e Planta Norte. O primeiro acesso da gestão ainda mistura as duas. O filtro deve abrir na planta do usuário.
-- **Fechamento assinado.** No fim do turno, a gestão confirma o número. Depois disso o apontamento daquele intervalo não muda sem trilha. Sem o fecho, o OEE do mês discute com a memória de quem lançou.
-
-### No sinal e no chat
-
-- **Identidade da máquina.** `POST /operacao/sinal` aceita qualquer usuário logado, para qualquer máquina. O CLP precisa de um token daquela máquina. Um pulso repetido não pode abrir outra parada.
-- **Procedimento já pronto.** As perguntas fixas do manual ("o dressing travou") passam pelo modelo toda vez e demoram. A resposta dos casos mais comuns pode ficar guardada e atualizar quando o PDF mudar.
-- **Estado e manual juntos.** Falta de material ou alarme deveria trazer o fato do posto e o passo do manual na mesma resposta, sem o operador escolher o caminho. Hoje, se a frase pede os dois, ainda espera o modelo.
-- **Sugestão de motivo antes do clique.** O ACMP ainda calcula na hora em que a parada abre. O formulário aparece logo, mas a lista demora. O top 3 daquela máquina pode ser calculado no worker e só lido na hora.
-
-### No sistema, para aguentar uso real
-
-- **A gestão ainda pede o histórico inteiro** em várias telas. A Operação já pede só a máquina. Indicadores, paradas e qualidade da gestão precisam do mesmo recorte: planta, linha e janela.
-- **Cópia do banco.** O volume do Postgres não tem rotina de backup e restauração escrita e ensaiada. Sem isso, um disco perdido apaga o mês.
-- **Teste do que mexe no número.** O corte de turno, o sinal e o chat de posto têm teste da conta de tempo. Falta o teste que grava no banco, vira o turno, aponta refugo e confere o cartão.
-- **Tablet sem rede.** O posto perde o túnel e a tela para. O apontamento precisa ficar no tablet e subir quando a rede voltar, sem duplicar peça.
-- **Sinal do CLP, não do simulador.** O contrato `POST /operacao/sinal` já existe. O próximo passo é o equipamento chamar esse contrato. O operador continua só confirmando o motivo.
+- O CLP real ainda não chama o contrato. O simulador continua no lugar do equipamento até a máquina ter token e o cabo existir.
+- A ciência do alerta mora no navegador, por uma hora. Não há um responsável gravado no servidor.
+- O aviso fora da página só sai se alguém colar o endereço. Não há conta de WhatsApp nem de e-mail embutida.
+- O teste que abre o Postgres, vira o turno e confere o cartão não roda neste ambiente: a biblioteca do pgvector não está instalada fora do Docker. A conta do refugo, da microparada, do chat e do retrabalho está coberta sem banco.
 
 ## Versões possíveis
 
-**Versão atual.** Posto e gestão no browser, OEE no servidor, manuais em PDF, chat de procedimento com o modelo e chat de posto direto do banco, ACMP, auditoria, virada de turno, alertas da gestão e sinal de parada com confirmação do motivo. Publicação por túnel Cloudflare.
+**Versão atual.** Posto e gestão no browser, OEE no servidor, manuais em PDF, chat que responde o fato pedido e o passo do manual na mesma frase quando os dois cabem, ACMP, auditoria, virada de turno, alertas com limiar e ciência, sinal com token opcional, fechamento de turno e fila do tablet. Publicação por túnel Cloudflare.
 
-**Versão seguinte, ainda neste produto.** Refugo sem contar duas vezes, aviso de turno sem peça na Operação, projeção da meta, andon do turno vivo, ciência do alerta e limiar por planta.
-
-**Versão de chão de fábrica.** Token da máquina no sinal, CLP no lugar do simulador, passagem e fechamento de turno, aviso fora da tela, tablet que aponta sem rede e sincroniza depois. O chat continua sem comandar o equipamento.
+**Versão de chão de fábrica.** O CLP chama `POST /operacao/sinal` com o token da máquina. O operador continua só confirmando o motivo. O chat continua sem comandar o equipamento.

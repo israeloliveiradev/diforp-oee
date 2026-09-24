@@ -72,7 +72,10 @@ def calcular_oee(p: dict[str, Any]) -> dict[str, Any]:
         producao_total += seguro(ev.get("qtd_total", ev.get("qtdTotal")))
         refugo += seguro(ev.get("qtd_refugo", ev.get("qtdRefugo")))
         retrabalho += seguro(ev.get("qtd_retrabalho", ev.get("qtdRetrabalho")))
-    aprovada = max(0.0, producao_total - refugo)
+    if config.get("retrabalho_na_qualidade"):
+        aprovada = max(0.0, producao_total - refugo - retrabalho)
+    else:
+        aprovada = max(0.0, producao_total - refugo)
 
     ciclo_ideal = p.get("ciclo_ideal_seg") or 0.0
     disponibilidade = dividir(operacional, tpp)

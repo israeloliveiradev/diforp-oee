@@ -40,6 +40,10 @@ def snapshot(db: Session, maquina_id: str | None = None, desde_ms: int | None = 
         "simulacao_ativa": cfg.simulacao_ativa if cfg else False,
         "intervalo_simulacao_seg": cfg.intervalo_simulacao_seg if cfg else 5,
         "limite_microparada_seg": cfg.limite_microparada_seg if cfg else 300,
+        "parada_longa_min": getattr(cfg, "parada_longa_min", None) or 15 if cfg else 15,
+        "sem_peca_min": getattr(cfg, "sem_peca_min", None) or 20 if cfg else 20,
+        "retrabalho_na_qualidade": bool(getattr(cfg, "retrabalho_na_qualidade", False)) if cfg else False,
+        "alerta_webhook_url": getattr(cfg, "alerta_webhook_url", None) or "" if cfg else "",
         "auditar_simulacao": cfg.auditar_simulacao if cfg else True,
         "acmp_ativo": cfg.acmp_ativo if cfg else True,
         "classificacao_estados": cfg.classificacao_estados if cfg else None,
@@ -49,7 +53,7 @@ def snapshot(db: Session, maquina_id: str | None = None, desde_ms: int | None = 
         "empresa": {"id": empresa.id, "nome": empresa.nome} if empresa else {"id": "EMP-1", "nome": "OEE"},
         "plantas": [_row(x, ["id", "empresa_id", "nome", "cidade"]) for x in db.scalars(select(m.Planta))],
         "areas": [_row(x, ["id", "planta_id", "nome"]) for x in db.scalars(select(m.Area))],
-        "linhas": [_row(x, ["id", "area_id", "nome"]) for x in db.scalars(select(m.Linha))],
+        "linhas": [_row(x, ["id", "area_id", "nome", "parada_longa_min", "sem_peca_min"]) for x in db.scalars(select(m.Linha))],
         "maquinas": [
             {
                 "id": x.id,

@@ -7,7 +7,7 @@ import os
 import time
 from typing import Any, Literal
 
-from sqlalchemy import text
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from oee.application.posto import contexto_posto, tipo_pergunta
@@ -237,6 +237,40 @@ def _guardar(db: Session, pergunta: str, resposta: str, relevantes: list[dict], 
     return {"resposta": resposta, "citacoes": citacoes, "sessao_id": sessao.id}
 
 
+_CACHE: dict[str, tuple[int, str]] = {}
+
+
+def _versao_manuais(db: Session, maquina_id: str | None) -> int:
+    q = db.query(func.max(m.Manual.criado_em)).filter(m.Manual.status == "pronto")
+    if maquina_id:
+        q = q.filter(or_(m.Manual.maquina_id == maquina_id, m.Manual.maquina_id.is_(None)))
+    return int(q.scalar() or 0)
+
+
+def _passos_manuais(db: Session, texto: str, maquina_id: str | None) -> str:
+    if not settings.gemini_api_key:
+        return ""
+    if not db.query(m.Manual).filter(m.Manual.status == "pronto").first():
+        return ""
+    versao = _versao_manuais(db, maquina_id)
+    chave = f"{maquina_id or ''}|{texto.strip().lower()}|{versao}"
+    guardado = _CACHE.get(chave)
+    if guardado and guardado[0] == versao:
+        return guardado[1]
+    hits = recuperar(db, texto, maquina_id)
+    relevantes = [h for h in hits if h.get("score") is None or h["score"] <= DISTANCIA_MAX]
+    if not relevantes:
+        return ""
+    contexto = "\n\n".join(f"[{h['titulo']} p.{h['pagina']}] {h.get('texto') or h['trecho']}" for h in relevantes)
+    try:
+        resposta = _gerar(f"{SYSTEM}\n\nMANUAIS:\n{contexto}\n\nPERGUNTA DO OPERADOR:\n{texto}")
+    except Exception:
+        log.exception("falha ao gerar passo do manual")
+        return ""
+    _CACHE[chave] = (versao, resposta)
+    return resposta
+
+
 def consultar(db: Session, pergunta: str, maquina_id: str | None, usuario_id: str) -> dict[str, Any]:
     texto = (pergunta or "").strip()
     if not texto:
@@ -247,6 +281,10 @@ def consultar(db: Session, pergunta: str, maquina_id: str | None, usuario_id: st
         if not fatos:
             return {"resposta": "Escolha a máquina ou diga o nome dela.", "citacoes": [], "sessao_id": None}
         return _guardar(db, texto, fatos, [], maquina_id, usuario_id)
+    if tipo == "ambos" and fatos:
+        passos = _passos_manuais(db, texto, maquina_id)
+        resposta = fatos if not passos else f"{fatos}\n\nNo manual:\n{passos}"
+        return _guardar(db, texto, resposta, [], maquina_id, usuario_id)
 
     if not settings.gemini_api_key:
         return {
@@ -266,17 +304,18 @@ def consultar(db: Session, pergunta: str, maquina_id: str | None, usuario_id: st
     relevantes = [h for h in hits if h.get("score") is None or h["score"] <= DISTANCIA_MAX]
     if not relevantes:
         if fatos:
-            try:
-                resposta = _gerar(f"{SYSTEM_POSTO}\n\nDADOS:\n{fatos}\n\nPERGUNTA:\n{texto}")
-            except Exception:
-                log.exception("falha ao responder com dados do posto")
-                resposta = fatos
-            return _guardar(db, texto, resposta, [], maquina_id, usuario_id)
+            return _guardar(db, texto, fatos, [], maquina_id, usuario_id)
         return {
             "resposta": "Não encontrei trechos nos manuais indexados para esta pergunta. Não é seguro inventar o procedimento.",
             "citacoes": [],
             "sessao_id": None,
         }
+
+    versao = _versao_manuais(db, maquina_id)
+    chave = f"{maquina_id or ''}|{texto.strip().lower()}|{versao}"
+    guardado = _CACHE.get(chave)
+    if guardado and guardado[0] == versao:
+        return _guardar(db, texto, guardado[1], relevantes, maquina_id, usuario_id)
 
     contexto = "\n\n".join(f"[{h['titulo']} p.{h['pagina']}] {h.get('texto') or h['trecho']}" for h in relevantes)
     bloco_posto = f"\n\nDADOS DO POSTO AGORA:\n{fatos}" if fatos else ""
@@ -284,11 +323,14 @@ def consultar(db: Session, pergunta: str, maquina_id: str | None, usuario_id: st
         resposta = _gerar(f"{SYSTEM}\n\nMANUAIS:\n{contexto}{bloco_posto}\n\nPERGUNTA DO OPERADOR:\n{texto}")
     except Exception:
         log.exception("falha ao gerar resposta do chat")
+        if fatos:
+            return _guardar(db, texto, fatos, [], maquina_id, usuario_id)
         return {
             "resposta": "Os manuais foram encontrados, mas o modelo de linguagem não respondeu agora. Tente de novo em instantes.",
             "citacoes": [{k: v for k, v in h.items() if k != "texto"} for h in relevantes],
             "sessao_id": None,
         }
+    _CACHE[chave] = (versao, resposta)
     return _guardar(db, texto, resposta, relevantes, maquina_id, usuario_id)
 
 

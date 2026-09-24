@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import unicodedata
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -11,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from oee.application.turno import virar_turnos
 from oee.domain.calculations import calcular_oee
+from oee.domain.chat_posto import classificar, sem_acento as _sem_acento, tipo_pergunta
 from oee.domain.timeutil import turno_do_instante
 from oee.infrastructure.db import models as m
 
@@ -28,72 +28,6 @@ ROTULOS_ESTADO = {
     "PARADA_PLANEJADA": "Parada planejada",
     "SEM_ORDEM": "Sem ordem de produção",
 }
-
-_COMO = (
-    "como fazer",
-    "como trocar",
-    "como consertar",
-    "como apontar",
-    "o que fazer",
-    "o que eu faço",
-    "o que eu faco",
-    "procedimento",
-    "passo a passo",
-    "alarme",
-    "trocar",
-    "consertar",
-    "posso ",
-)
-_POSTO = (
-    "status",
-    "estado",
-    "como está",
-    "como esta",
-    "situação",
-    "situacao",
-    "última parada",
-    "ultima parada",
-    "parou",
-    "desde quando",
-    "há quanto",
-    "ha quanto",
-    "produção",
-    "producao",
-    "quanto produziu",
-    "quantas pe",
-    "peças",
-    "pecas",
-    "oee",
-    "disponibilidade",
-    "refugo",
-    "retrabalho",
-    "meta",
-    "ordem",
-    "operador",
-    "turno",
-    "apont",
-    "ultima peca",
-    "última peça",
-    "turno anterior",
-    "compar",
-)
-
-
-def _sem_acento(texto: str) -> str:
-    base = unicodedata.normalize("NFD", texto or "")
-    return "".join(c for c in base if unicodedata.category(c) != "Mn").lower()
-
-
-def tipo_pergunta(pergunta: str) -> str:
-    q = _sem_acento(pergunta)
-    posto = any(_sem_acento(p) in q for p in _POSTO)
-    como = any(_sem_acento(p) in q for p in _COMO)
-    if posto and not como:
-        return "posto"
-    if posto and como:
-        return "ambos"
-    return "manual"
-
 
 def _hora(ts: int | None) -> str:
     if not ts:
@@ -160,10 +94,10 @@ def _oee_janela(db: Session, maq: m.Maquina, ini: int, fim: int, ordem: m.Ordem 
     )
 
 
-def _linha_oee(rotulo: str, ind: dict, meta: int) -> str:
-    produzido = int(ind.get("producao_total") or 0)
-    if ind.get("oee") is None:
-        oee = "não calculado: sem peça neste turno" if produzido == 0 else "não calculado"
+def _linha_oee(rotulo: str, ind: dict, meta: int, pecas: int | None = None) -> str:
+    produzido = int(pecas if pecas is not None else ind.get("producao_total") or 0)
+    if ind.get("oee") is None or (pecas is not None and pecas != int(ind.get("producao_total") or 0)):
+        oee = "não calculado" if produzido > 0 else "não calculado: sem peça neste turno"
     else:
         oee = _pct(ind.get("oee"))
     if meta <= 0:
@@ -241,12 +175,20 @@ def contexto_posto(db: Session, maquina_id: str | None, pergunta: str) -> str:
 
     anterior = turno_do_instante(turnos, ini - 60_000)
     if anterior.get("inicio") and anterior.get("inicio") != ini:
+        soma_ant = db.execute(
+            select(func.coalesce(func.sum(m.EventoProducao.qtd_total), 0)).where(
+                m.EventoProducao.maquina_id == maq.id,
+                m.EventoProducao.ts >= int(anterior["inicio"]),
+                m.EventoProducao.ts <= int(anterior["fim"]),
+            )
+        ).scalar()
         ind_ant = _oee_janela(db, maq, int(anterior["inicio"]), int(anterior["fim"]), ordem)
         linhas.append(
             _linha_oee(
                 f"Turno anterior ({anterior.get('nome')}, {_hora(anterior.get('inicio'))} até {_hora(anterior.get('fim'))})",
                 ind_ant,
                 meta,
+                int(soma_ant or 0),
             )
         )
 
@@ -272,18 +214,62 @@ def contexto_posto(db: Session, maquina_id: str | None, pergunta: str) -> str:
             .limit(3)
         )
     )
-    if not paradas:
-        linhas.append("Paradas: nenhuma registrada nesta máquina.")
-    else:
-        linhas.append("Últimas paradas, da mais recente para a mais antiga:")
-        for p in paradas:
-            motivo = db.get(m.Motivo, p.motivo_id) if p.motivo_id else None
-            nome_motivo = motivo.nome if motivo else "sem motivo"
-            if p.fim:
-                trecho = f"encerrou {_hora(p.fim)}, durou {_duracao(p.duracao_seg or 0)}"
-            else:
-                trecho = f"ainda aberta, há {_duracao((agora - int(p.inicio or agora)) / 1000)}"
-            extra = f" Observação: {p.comentario}." if p.comentario else ""
-            linhas.append(f"- {_hora(p.inicio)} {ROTULOS_ESTADO.get(p.estado or '', p.estado or 'parada')}, motivo {nome_motivo}, {trecho}.{extra}")
+    def _parada_txt(p: m.EventoParada) -> str:
+        motivo = db.get(m.Motivo, p.motivo_id) if p.motivo_id else None
+        nome_motivo = motivo.nome if motivo else "sem motivo"
+        if p.fim:
+            trecho = f"encerrou {_hora(p.fim)}, durou {_duracao(p.duracao_seg or 0)}"
+        else:
+            trecho = f"ainda aberta, há {_duracao((agora - int(p.inicio or agora)) / 1000)}"
+        return f"{_hora(p.inicio)} {ROTULOS_ESTADO.get(p.estado or '', p.estado or 'parada')}, motivo {nome_motivo}, {trecho}."
 
-    return "\n".join(linhas)
+    falhas = [
+        p
+        for p in db.scalars(
+            select(m.EventoParada)
+            .where(m.EventoParada.maquina_id == maq.id, m.EventoParada.planejada.is_(False))
+            .order_by(m.EventoParada.inicio.desc())
+            .limit(12)
+        )
+        if (p.estado or "") not in ("SETUP", "SEM_ORDEM", "LIMPEZA", "PARADA_PLANEJADA")
+    ]
+    ordens = list(
+        db.scalars(
+            select(m.Ordem).where(m.Ordem.maquina_id == maq.id).order_by(m.Ordem.inicio.desc()).limit(5)
+        )
+    )
+
+    tema = classificar(pergunta) or "resumo"
+    cabeca = f"{maq.nome}."
+    if tema == "ordem":
+        return cabeca + " " + (linhas[next(i for i, x in enumerate(linhas) if x.startswith("Ordem aberta"))])
+    if tema == "ordens":
+        if not ordens:
+            return f"{cabeca} Nenhuma ordem registrada nesta máquina."
+        itens = [f"{cabeca} Últimas ordens, da mais recente:"]
+        for od in ordens:
+            prod = db.get(m.Produto, od.produto_id)
+            fim = _hora(od.fim) if od.fim else "aberta"
+            itens.append(f"- {od.codigo}, {prod.nome if prod else od.produto_id}, {od.status}, de {_hora(od.inicio)} até {fim}, meta {int(od.meta_qtd or 0)}.")
+        return "\n".join(itens)
+    if tema == "falha":
+        if not falhas:
+            return f"{cabeca} Nenhuma falha não planejada registrada nesta máquina."
+        return f"{cabeca} Última falha: {_parada_txt(falhas[0])}"
+    if tema == "status":
+        return "\n".join([cabeca, linhas[1], linhas[2], next(x for x in linhas if x.startswith("Ordem aberta"))])
+    if tema == "operador":
+        return cabeca + " " + next(x for x in linhas if x.startswith("Operador"))
+    if tema == "producao":
+        return "\n".join([cabeca, next(x for x in linhas if x.startswith("Produção")), next(x for x in linhas if x.startswith("Última peça"))])
+    if tema == "oee":
+        return "\n".join([cabeca, next(x for x in linhas if x.startswith("Indicadores")), next(x for x in linhas if x.startswith("Produção"))])
+    if tema == "anterior":
+        ant = next((x for x in linhas if x.startswith("Turno anterior")), "")
+        return f"{cabeca} {ant}" if ant else f"{cabeca} Ainda não há turno anterior nesta consulta."
+    partes = [cabeca, linhas[1], next(x for x in linhas if x.startswith("Ordem aberta")), next(x for x in linhas if x.startswith("Produção"))]
+    if falhas:
+        partes.append("Última falha: " + _parada_txt(falhas[0]))
+    elif paradas:
+        partes.append("Última parada: " + _parada_txt(paradas[0]))
+    return "\n".join(partes)

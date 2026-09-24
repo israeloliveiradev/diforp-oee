@@ -37,6 +37,14 @@ def criar_tabelas() -> None:
             log.warning("índice pgvector não criado nesta instância (extensão ou versão)")
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE maquinas ADD COLUMN IF NOT EXISTS sinal_sem_motivo BOOLEAN NOT NULL DEFAULT FALSE"))
+        conn.execute(text("ALTER TABLE maquinas ADD COLUMN IF NOT EXISTS sinal_token VARCHAR(128)"))
+        conn.execute(text("ALTER TABLE linhas ADD COLUMN IF NOT EXISTS parada_longa_min INTEGER"))
+        conn.execute(text("ALTER TABLE linhas ADD COLUMN IF NOT EXISTS sem_peca_min INTEGER"))
+        conn.execute(text("ALTER TABLE config_app ADD COLUMN IF NOT EXISTS parada_longa_min INTEGER DEFAULT 15"))
+        conn.execute(text("ALTER TABLE config_app ADD COLUMN IF NOT EXISTS sem_peca_min INTEGER DEFAULT 20"))
+        conn.execute(text("ALTER TABLE config_app ADD COLUMN IF NOT EXISTS retrabalho_na_qualidade BOOLEAN NOT NULL DEFAULT FALSE"))
+        conn.execute(text("ALTER TABLE config_app ADD COLUMN IF NOT EXISTS alerta_webhook_url VARCHAR(512)"))
+        conn.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS planta_id VARCHAR(64)"))
         conn.commit()
 
 

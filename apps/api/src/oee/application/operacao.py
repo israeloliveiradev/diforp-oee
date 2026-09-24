@@ -5,10 +5,12 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from oee.domain.audit import montar_registro
 from oee.domain.calculations import calcular_oee
+from oee.domain.apontamento import vira_microparada
 from oee.domain.catalog import ESTADOS
 from oee.domain.ids import novo_id
 from oee.domain.timeutil import turno_do_instante
@@ -27,14 +29,57 @@ def _auditar(db: Session, ev: dict[str, Any]) -> None:
     db.add(m.Auditoria(**reg))
 
 
-def _fechar_abertos(db: Session, maquina_id: str, ts: int) -> None:
+def _fechar_abertos(db: Session, maquina_id: str, ts: int, limite_micro: int | None = None) -> None:
     abertos = db.query(m.EventoEstado).filter(m.EventoEstado.maquina_id == maquina_id, m.EventoEstado.fim.is_(None)).all()
     for ev in abertos:
+        dur = max(0, round((ts - (ev.inicio or ts)) / 1000))
         ev.fim = ts
+        if limite_micro is not None and vira_microparada(dur, limite_micro, ev.estado or ""):
+            ev.estado = "MICROPARADA"
     paradas = db.query(m.EventoParada).filter(m.EventoParada.maquina_id == maquina_id, m.EventoParada.fim.is_(None)).all()
     for p in paradas:
         p.fim = ts
         p.duracao_seg = max(0, round((ts - p.inicio) / 1000))
+        if limite_micro is not None and vira_microparada(p.duracao_seg, limite_micro, p.estado or ""):
+            p.estado = "MICROPARADA"
+
+
+def _planta_id(db: Session, maq: m.Maquina) -> str | None:
+    linha = db.get(m.Linha, maq.linha_id) if maq.linha_id else None
+    area = db.get(m.Area, linha.area_id) if linha and linha.area_id else None
+    return area.planta_id if area else None
+
+
+def _turno_fechado(db: Session, maquina_id: str, ts: int) -> bool:
+    maq = db.get(m.Maquina, maquina_id)
+    if not maq:
+        return False
+    planta = _planta_id(db, maq)
+    if not planta:
+        return False
+    fechado = db.scalars(
+        select(m.FechamentoTurno).where(
+            m.FechamentoTurno.planta_id == planta,
+            m.FechamentoTurno.reaberto.is_(False),
+            m.FechamentoTurno.inicio <= ts,
+            m.FechamentoTurno.fim >= ts,
+        )
+    ).first()
+    return fechado is not None
+
+
+def _repetido(db: Session, chave: str | None) -> dict | None:
+    if not chave:
+        return None
+    ja = db.get(m.ChaveIdempotencia, chave[:80])
+    if not ja:
+        return None
+    return {"id": ja.referencia, "repetido": True}
+
+
+def _gravar_chave(db: Session, chave: str | None, referencia: str) -> None:
+    if chave:
+        db.add(m.ChaveIdempotencia(chave=chave[:80], referencia=referencia, criado_em=_agora()))
 
 
 def mudar_estado(
@@ -47,18 +92,28 @@ def mudar_estado(
     comentario: str = "",
     acao: str | None = None,
     aguardando_motivo: bool = False,
+    chave: str | None = None,
 ) -> dict[str, Any]:
     from oee.application.turno import virar_turnos
 
+    repetido = _repetido(db, chave)
+    if repetido:
+        return repetido
     virar_turnos(db)
     maq = db.get(m.Maquina, maquina_id)
     if not maq:
         raise ValueError("Máquina não encontrada")
     ts = _agora()
+    if _turno_fechado(db, maquina_id, ts) and origem != "GESTAO":
+        raise ValueError("Este turno já foi fechado pela gestão. O apontamento não muda sem a trilha dela.")
     ds = snapshot(db)
     turno = turno_do_instante(ds["turnos"], ts)
     anterior = maq.estado_atual
-    _fechar_abertos(db, maquina_id, ts)
+    limite = None
+    if ESTADOS.get(novo_estado, {}).get("classe") == "PRODUTIVO":
+        cfg = db.get(m.ConfigApp, "default")
+        limite = int(cfg.limite_microparada_seg if cfg and cfg.limite_microparada_seg else 300)
+    _fechar_abertos(db, maquina_id, ts, limite)
     db.add(
         m.EventoEstado(
             id=novo_id("EST"),
@@ -113,6 +168,7 @@ def mudar_estado(
             "depois": {"estado": novo_estado, "motivo_id": motivo_id},
         },
     )
+    _gravar_chave(db, chave, maquina_id)
     db.commit()
     db.refresh(maq)
     return {"maquina_id": maquina_id, "estado": novo_estado, "desde": ts, "aguardando_motivo": bool(maq.sinal_sem_motivo)}
@@ -127,13 +183,19 @@ def apontar_producao(
     causa_refugo: str | None,
     usuario: str,
     origem: str = "OPERADOR",
+    chave: str | None = None,
 ) -> dict[str, Any]:
     from oee.application.turno import virar_turnos
 
+    repetido = _repetido(db, chave)
+    if repetido:
+        return repetido
     virar_turnos(db)
     maq = db.get(m.Maquina, maquina_id)
     if not maq:
         raise ValueError("Máquina não encontrada")
+    if _turno_fechado(db, maquina_id, _agora()) and origem != "GESTAO":
+        raise ValueError("Este turno já foi fechado pela gestão. O apontamento não muda sem a trilha dela.")
     if not maq.ordem_atual_id:
         raise ValueError("Abra uma ordem de produção antes de apontar.")
     if qtd_total < 0 or qtd_refugo < 0 or qtd_retrabalho < 0:
@@ -176,6 +238,7 @@ def apontar_producao(
             "depois": {"qtd_total": qtd_total, "qtd_refugo": qtd_refugo, "qtd_retrabalho": qtd_retrabalho},
         },
     )
+    _gravar_chave(db, chave, ev.id)
     db.commit()
     return {"id": ev.id}
 
@@ -325,6 +388,7 @@ def finalizar_ordem(db: Session, maquina_id: str, usuario: str, origem: str = "O
         },
     )
     maq.ordem_atual_id = None
+    maq.produto_atual_id = None
     mudar_estado(db, maquina_id, "SEM_ORDEM", usuario, origem)
     return {"id": ordem.id, "indicadores": apurado}
 
@@ -381,3 +445,98 @@ def registrar_sinal(db: Session, maquina_id: str, produzindo: bool, usuario: str
             aguardando_motivo=True,
         )
     return {"maquina_id": maquina_id, "estado": maq.estado_atual, "aguardando_motivo": bool(maq.sinal_sem_motivo)}
+
+
+def assumir_posto(db: Session, maquina_id: str, matricula: str, usuario: str) -> dict:
+    maq = db.get(m.Maquina, maquina_id)
+    if not maq:
+        raise ValueError("Máquina não encontrada")
+    op = db.scalars(select(m.Operador).where(m.Operador.matricula == matricula.strip())).first()
+    if not op:
+        raise ValueError("Crachá não encontrado.")
+    antes = maq.operador_atual_id
+    maq.operador_atual_id = op.id
+    _auditar(
+        db,
+        {
+            "acao": "OPERADOR_NO_POSTO",
+            "usuario": usuario,
+            "maquina_id": maquina_id,
+            "operador_id": op.id,
+            "descricao": f"{maq.nome}: posto assumido por {op.nome}",
+            "entidade": "maquinas",
+            "entidade_id": maquina_id,
+            "antes": {"operador_atual_id": antes},
+            "depois": {"operador_atual_id": op.id, "nome": op.nome},
+        },
+    )
+    db.commit()
+    return {"operador_id": op.id, "nome": op.nome}
+
+
+def fechar_turno(db: Session, planta_id: str, usuario: str, nota: str = "") -> dict:
+    from oee.application.turno import virar_turnos
+
+    if not db.get(m.Planta, planta_id):
+        raise ValueError("Planta não encontrada")
+    virar_turnos(db)
+    ts = _agora()
+    ds = snapshot(db)
+    turno = turno_do_instante(ds["turnos"], ts)
+    ini, fim = int(turno.get("inicio") or ts), int(turno.get("fim") or ts)
+    ja = db.scalars(
+        select(m.FechamentoTurno).where(
+            m.FechamentoTurno.planta_id == planta_id,
+            m.FechamentoTurno.inicio == ini,
+            m.FechamentoTurno.reaberto.is_(False),
+        )
+    ).first()
+    if ja:
+        return {"id": ja.id, "inicio": ja.inicio, "fim": ja.fim, "repetido": True}
+    row = m.FechamentoTurno(
+        id=novo_id("FEC"),
+        planta_id=planta_id,
+        inicio=ini,
+        fim=fim,
+        usuario=usuario,
+        ts=ts,
+        nota=nota or "",
+        reaberto=False,
+    )
+    db.add(row)
+    _auditar(
+        db,
+        {
+            "acao": "TURNO_FECHADO",
+            "origem": "GESTAO",
+            "usuario": usuario,
+            "descricao": f"Turno fechado na planta {planta_id}",
+            "entidade": "fechamentos_turno",
+            "entidade_id": row.id,
+            "depois": {"inicio": ini, "fim": fim, "nota": nota},
+        },
+    )
+    db.commit()
+    return {"id": row.id, "inicio": ini, "fim": fim}
+
+
+def reabrir_turno(db: Session, fechamento_id: str, usuario: str) -> dict:
+    row = db.get(m.FechamentoTurno, fechamento_id)
+    if not row:
+        raise ValueError("Fechamento não encontrado")
+    row.reaberto = True
+    _auditar(
+        db,
+        {
+            "acao": "TURNO_REABERTO",
+            "origem": "GESTAO",
+            "usuario": usuario,
+            "descricao": f"Turno reaberto ({fechamento_id})",
+            "entidade": "fechamentos_turno",
+            "entidade_id": row.id,
+            "antes": {"reaberto": False},
+            "depois": {"reaberto": True},
+        },
+    )
+    db.commit()
+    return {"id": row.id, "reaberto": True}

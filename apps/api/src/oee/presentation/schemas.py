@@ -83,8 +83,22 @@ class ConfigIn(BaseModel):
     simulacao_ativa: bool | None = None
     intervalo_simulacao_seg: int | None = None
     limite_microparada_seg: int | None = None
+    parada_longa_min: int | None = None
+    sem_peca_min: int | None = None
+    retrabalho_na_qualidade: bool | None = None
+    alerta_webhook_url: str | None = None
     auditar_simulacao: bool | None = None
     acmp_ativo: bool | None = None
+
+
+class OperadorPostoIn(BaseModel):
+    maquina_id: str
+    matricula: str
+
+
+class FechamentoIn(BaseModel):
+    planta_id: str
+    nota: str = ""
 
 
 class ChatIn(BaseModel):

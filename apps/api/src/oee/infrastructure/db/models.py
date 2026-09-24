@@ -57,6 +57,8 @@ class Linha(Base):
     id = Column(String(64), primary_key=True)
     area_id = Column(String(64), ForeignKey("areas.id"))
     nome = Column(String(255), nullable=False)
+    parada_longa_min = Column(Integer, nullable=True)
+    sem_peca_min = Column(Integer, nullable=True)
 
 
 class Produto(Base):
@@ -82,6 +84,7 @@ class Maquina(Base):
     meta_turno = Column(Float, default=0)
     ativa = Column(Boolean, default=True)
     sinal_sem_motivo = Column(Boolean, default=False, server_default="false")
+    sinal_token = Column(String(128), nullable=True)
     produtos_habilitados = Column(JSON, default=list)
 
 
@@ -211,6 +214,10 @@ class ConfigApp(Base):
     simulacao_ativa = Column(Boolean, default=False)
     intervalo_simulacao_seg = Column(Integer, default=5)
     limite_microparada_seg = Column(Integer, default=300)
+    parada_longa_min = Column(Integer, default=15)
+    sem_peca_min = Column(Integer, default=20)
+    retrabalho_na_qualidade = Column(Boolean, default=False, server_default="false")
+    alerta_webhook_url = Column(String(512), nullable=True)
     auditar_simulacao = Column(Boolean, default=True)
     acmp_ativo = Column(Boolean, default=True)
     classificacao_estados = Column(JSON, nullable=True)
@@ -224,6 +231,26 @@ class Usuario(Base):
     senha_hash = Column(String(255), nullable=False)
     papel = Column(String(32), nullable=False)  # operador | gestao
     operador_id = Column(String(64), nullable=True)
+    planta_id = Column(String(64), nullable=True)
+
+
+class FechamentoTurno(Base):
+    __tablename__ = "fechamentos_turno"
+    id = Column(String(64), primary_key=True)
+    planta_id = Column(String(64), index=True, nullable=False)
+    inicio = Column(BigInteger, nullable=False)
+    fim = Column(BigInteger, nullable=False)
+    usuario = Column(String(255), nullable=False)
+    ts = Column(BigInteger, nullable=False)
+    nota = Column(Text, default="")
+    reaberto = Column(Boolean, default=False, server_default="false")
+
+
+class ChaveIdempotencia(Base):
+    __tablename__ = "chaves_idempotencia"
+    chave = Column(String(80), primary_key=True)
+    referencia = Column(String(64), nullable=False)
+    criado_em = Column(BigInteger, nullable=False)
 
 
 class Manual(Base):

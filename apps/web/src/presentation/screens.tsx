@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../infrastructure/api";
 import {
   AUDIT_ACOES,
@@ -42,8 +42,20 @@ type Notify = (msg: string, tipo?: string) => void;
 const PERFIS = ["BOM", "BAIXA_DISPONIBILIDADE", "BAIXA_PERFORMANCE", "QUALIDADE", "EXCESSO_SETUP", "MICROPARADAS", "AGUARDA_MATERIAL"];
 
 function useGestao() {
-  const [f, setF] = useState({ ...FILTROS_PADRAO });
+  const [f, setF] = useState({ ...FILTROS_PADRAO, planta_id: localStorage.getItem("oee.planta") || "" });
+  const [plantaPronta, setPlantaPronta] = useState(false);
   const ds = useQuery({ queryKey: ["ds"], queryFn: api.dataset });
+  useEffect(() => {
+    if (f.planta_id) localStorage.setItem("oee.planta", f.planta_id);
+  }, [f.planta_id]);
+  useEffect(() => {
+    const plantas = ds.data?.plantas || [];
+    if (plantaPronta || !plantas.length) return;
+    const salva = localStorage.getItem("oee.planta") || "";
+    const id = plantas.some((p: any) => p.id === salva) ? salva : plantas[0].id;
+    setF((atual) => ({ ...atual, planta_id: id }));
+    setPlantaPronta(true);
+  }, [ds.data, plantaPronta]);
   const q = paramsIndicadores(f, ds.data);
   const dash = useQuery({ queryKey: ["ind", q], queryFn: () => api.indicadores(q), enabled: !!ds.data });
   return { f, setF, ds, q, dash };
@@ -86,6 +98,7 @@ function ModalMotivo({
   motivos,
   sugestoes,
   filtroCategoria,
+  motivoInicial,
   onOk,
   onClose,
 }: {
@@ -93,13 +106,15 @@ function ModalMotivo({
   motivos: any[];
   sugestoes: any[];
   filtroCategoria?: string;
+  motivoInicial?: string;
   onOk: (motivoId: string, comentario: string, sugestaoPosicao: number | null) => void;
   onClose: () => void;
 }) {
   const filtrados = motivos.filter((m) => !filtroCategoria || m.categoria === filtroCategoria);
   const categorias = Array.from(new Set(filtrados.map((m) => m.categoria)));
-  const [cat, setCat] = useState(categorias[0] || "");
-  const [motivoId, setMotivoId] = useState("");
+  const inicial = motivos.find((m) => m.id === motivoInicial);
+  const [cat, setCat] = useState(inicial?.categoria || categorias[0] || "");
+  const [motivoId, setMotivoId] = useState(motivoInicial || "");
   const [comentario, setComentario] = useState("");
   const [posicao, setPosicao] = useState<number | null>(null);
   const [erro, setErro] = useState(false);
@@ -229,11 +244,12 @@ function ModalQtd({
 }: {
   titulo: string;
   pedirCausa?: boolean;
-  onOk: (qtd: number, causa?: string | null) => void;
+  onOk: (qtd: number, causa?: string | null, destas?: boolean) => void;
   onClose: () => void;
 }) {
   const [valor, setValor] = useState(0);
   const [causa, setCausa] = useState(CAUSAS_REFUGO[0]);
+  const [destas, setDestas] = useState(false);
   const [erro, setErro] = useState("");
 
   function aplicar(n: number) {
@@ -258,7 +274,7 @@ function ModalQtd({
                 setErro("Informe uma quantidade maior que zero.");
                 return;
               }
-              onOk(valor, pedirCausa ? causa : null);
+              onOk(valor, pedirCausa ? causa : null, pedirCausa ? destas : false);
             }}
           >
             Registrar
@@ -305,6 +321,10 @@ function ModalQtd({
                 <option key={c}>{c}</option>
               ))}
             </select>
+            <label className="rotulo-campo" htmlFor="qtd-destas">
+              <input id="qtd-destas" type="checkbox" checked={destas} onChange={(e) => setDestas(e.target.checked)} /> Destas peças já estavam no produzido
+            </label>
+            {destas ? <p className="nota">Não soma de novo em Produzido. Só move de aprovado para rejeitado.</p> : null}
           </>
         ) : null}
         {erro ? <p className="erro-campo">{erro}</p> : null}
@@ -454,34 +474,79 @@ function ModalTexto({
 /* Visão Geral                                                        */
 /* ------------------------------------------------------------------ */
 
+function cienciaAtiva() {
+  const bruto = JSON.parse(localStorage.getItem("oee.ciencia") || "{}");
+  const agora = Date.now();
+  return Object.fromEntries(Object.entries(bruto).filter(([, ate]) => Number(ate) > agora));
+}
+
 export function VisaoGeral() {
   const nav = useNavigate();
   const { f, setF, ds, dash } = useGestao();
+  const [ciencia, setCiencia] = useState<Record<string, number>>(() => cienciaAtiva());
   const alertas = useQuery({ queryKey: ["alertas"], queryFn: api.alertas, refetchInterval: 20000 });
+  const qTurno = paramsIndicadores({ ...f, periodo: "turno" }, ds.data);
+  const dashTurno = useQuery({
+    queryKey: ["ind", "andon", qTurno],
+    queryFn: () => api.indicadores(qTurno),
+    enabled: !!ds.data,
+    refetchInterval: 20000,
+  });
   const data = dash.data;
   const ind = data?.indicadores;
   const meta = ds.data?.config?.meta_oee;
   const serie = data?.serie || [];
   const porMaq = [...(data?.por_maquina || [])].sort((a: any, b: any) => (b.indicadores?.oee || 0) - (a.indicadores?.oee || 0));
-  const porMap = Object.fromEntries(porMaq.map((g: any) => [g.chave, g]));
+  const porTurno = Object.fromEntries((dashTurno.data?.por_maquina || []).map((g: any) => [g.chave, g]));
+  const visiveis = (alertas.data || []).filter((a: any) => !ciencia[`${a.tipo}:${a.maquina_id}`]);
 
   return (
     <>
       <BarraFiltros ds={ds.data || {}} f={f} setF={setF} />
-      {(alertas.data || []).length ? (
-        <div className="alerta-inconsistencia" role="alert">
-          <strong>Para agir agora.</strong>
-          <ul>
-            {(alertas.data || []).map((a: any) => (
-              <li key={`${a.tipo}-${a.maquina_id}`}>
-                <button type="button" className="botao botao--pequeno" onClick={() => abrirOperacao(a.maquina_id, nav)}>
-                  {a.titulo}
+      {visiveis.length ? (
+        <section className="painel painel-alertas" aria-label="Para agir agora">
+          <h2 className="painel__titulo">Para agir agora</h2>
+          <div className="alertas-grade">
+            {visiveis.map((a: any) => (
+              <article key={`${a.tipo}-${a.maquina_id}`} className={`alerta-card alerta-card--${a.criticidade === "critico" ? "critico" : "atencao"}`}>
+                <button type="button" className="alerta-card__abrir" onClick={() => abrirOperacao(a.maquina_id, nav)}>
+                  <span className="alerta-card__selo">{a.criticidade === "critico" ? "Crítico" : "Atenção"}</span>
+                  <span className="alerta-card__titulo">{a.titulo}</span>
+                  <span className="alerta-card__acao">{a.acao}</span>
                 </button>
-                <span> {a.acao}</span>
-              </li>
+                <button
+                  type="button"
+                  className="botao botao--pequeno"
+                  onClick={() => {
+                    const prox = { ...cienciaAtiva(), [`${a.tipo}:${a.maquina_id}`]: Date.now() + 3600000 };
+                    localStorage.setItem("oee.ciencia", JSON.stringify(prox));
+                    setCiencia(prox);
+                  }}
+                >
+                  Vi, ocultar 1 h
+                </button>
+              </article>
             ))}
-          </ul>
-        </div>
+          </div>
+        </section>
+      ) : null}
+      {f.planta_id ? (
+        <p className="nota">
+          <button
+            type="button"
+            className="botao botao--secundario"
+            onClick={async () => {
+              try {
+                await api.fecharTurno({ planta_id: f.planta_id });
+                window.alert("Turno fechado. Apontamento novo neste intervalo pede a gestão.");
+              } catch (e: any) {
+                window.alert(e.message || "Não foi possível fechar o turno.");
+              }
+            }}
+          >
+            Fechar o turno desta planta
+          </button>
+        </p>
       ) : null}
       {dash.isError ? <p className="erro-campo">Erro ao carregar indicadores.</p> : null}
       {dash.isLoading || !ind ? (
@@ -510,6 +575,16 @@ export function VisaoGeral() {
         <div className="alerta-inconsistencia" role="alert">
           <strong>Verificar apontamentos.</strong> {ind.anomalias.map((a: any) => a.mensagem).join(" ")}
         </div>
+      ) : null}
+      {ind ? (
+        <Painel titulo="Seis grandes perdas">
+          <div className="op-producao">
+            {seisPerdas(ind).map(([rotulo, valor]) => (
+              <CardKPI key={rotulo} rotulo={rotulo} valor={valor} />
+            ))}
+          </div>
+          <p className="nota">Parada, setup, microparada e ciclo lento saem do tempo. Refugo e retrabalho saem das peças. É o recorte do período filtrado.</p>
+        </Painel>
       ) : null}
       <div className="grade-2">
         <BlocoGrafico titulo={`Tendência do OEE — ${ROTULO_PERIODO[f.periodo] || f.periodo}`}>
@@ -540,9 +615,9 @@ export function VisaoGeral() {
       </div>
       <Painel titulo="Estado das máquinas agora">
         <div className="andon">
-          {(ds.data?.maquinas || []).map((m: any) => {
+          {(ds.data?.maquinas || []).filter((m: any) => !f.planta_id || !dashTurno.data || porTurno[m.id]).map((m: any) => {
             const def = ESTADOS[m.estado_atual] || ESTADOS.SEM_ORDEM;
-            const g = porMap[m.id];
+            const g = porTurno[m.id];
             const oee = g?.indicadores?.oee;
             const turnoAgora = janelaTurno(ds.data?.turnos, Date.now());
             const desde = Math.max(Number(m.estado_desde) || turnoAgora.inicio, turnoAgora.inicio || 0);
@@ -558,7 +633,7 @@ export function VisaoGeral() {
                   {def.icone} {def.rotulo}
                 </span>
                 <span className="andon__tempo">{dur((Date.now() - desde) / 1000)}</span>
-                <span className={`andon__oee faixa--${faixaOee(oee, meta)}`}>OEE {pct(oee, 0)}</span>
+                <span className={`andon__oee faixa--${faixaOee(oee, meta)}`}>OEE do turno {pct(oee, 0)}</span>
               </button>
             );
           })}
@@ -568,17 +643,46 @@ export function VisaoGeral() {
   );
 }
 
-function somaProducaoTurno(eventos: any[] | undefined, maquinaId: string, ini: number, fim: number) {
+function somaProducaoOrdem(eventos: any[] | undefined, ordemId?: string) {
   let total = 0;
   let refugo = 0;
   let retrabalho = 0;
+  if (!ordemId) return { total, refugo, retrabalho, aprovado: 0 };
   for (const e of eventos || []) {
-    if (e.maquina_id !== maquinaId || e.ts < ini || e.ts > fim) continue;
+    if (e.ordem_id !== ordemId) continue;
     total += Number(e.qtd_total) || 0;
     refugo += Number(e.qtd_refugo) || 0;
     retrabalho += Number(e.qtd_retrabalho) || 0;
   }
   return { total, refugo, retrabalho, aprovado: Math.max(0, total - refugo) };
+}
+
+function fraseMeta(pecas: number, meta: number, ritmoH: number, fimTurno: number) {
+  if (!meta) return "Meta não definida.";
+  if (pecas >= meta) return "Meta batida.";
+  if (ritmoH <= 0) return "Neste ritmo não fecha.";
+  const quando = Date.now() + ((meta - pecas) / ritmoH) * 3600000;
+  if (quando <= fimTurno) {
+    const d = new Date(quando);
+    return `Neste ritmo fecha às ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}.`;
+  }
+  return "Neste ritmo não fecha.";
+}
+
+function seisPerdas(ind: any) {
+  const tempos = ind?.tempos_por_estado || {};
+  const micro = Number(tempos.MICROPARADA) || 0;
+  const setup = Number(tempos.SETUP) || 0;
+  const parada = Math.max(0, (Number(ind?.parada_nao_planejada_seg) || 0) - micro);
+  const cicloLento = Math.max(0, (Number(ind?.tempo_operacional_seg) || 0) - (Number(ind?.producao_total) || 0) * (Number(ind?.ciclo_ideal_seg) || 0));
+  return [
+    ["Parada", dur(parada)],
+    ["Setup", dur(setup)],
+    ["Microparada", dur(micro)],
+    ["Ciclo lento", dur(cicloLento)],
+    ["Refugo", num(ind?.refugo)],
+    ["Retrabalho", num(ind?.retrabalho)],
+  ];
 }
 
 /* ------------------------------------------------------------------ */
@@ -590,7 +694,10 @@ export function Operacao({ notify }: { notify: Notify }) {
   const [maqId, setMaqId] = useState(localStorage.getItem("oee.maq") || "");
   const [tick, setTick] = useState(0);
   const [ocupado, setOcupado] = useState(false);
-  const [modal, setModal] = useState<null | "parada" | "pausa" | "reclass" | "manut" | "prod" | "refugo" | "retr" | "obs" | "ordem">(null);
+  const [modal, setModal] = useState<null | "parada" | "pausa" | "reclass" | "manut" | "prod" | "refugo" | "retr" | "obs" | "ordem" | "passagem">(null);
+  const [motivoFixo, setMotivoFixo] = useState<string | undefined>();
+  const [matricula, setMatricula] = useState("");
+  const [notaPassagem, setNotaPassagem] = useState("");
   const [sug, setSug] = useState<any[]>([]);
   const dsQ = useQuery({
     queryKey: ["ds", "op", maqId],
@@ -599,6 +706,7 @@ export function Operacao({ notify }: { notify: Notify }) {
   });
   const ds = dsQ.data;
   const maq = (ds?.maquinas || []).find((m: any) => m.id === maqId) || ds?.maquinas?.[0];
+  const ordemAberta = (ds?.ordens || []).find((o: any) => o.id === maq?.ordem_atual_id);
 
   useEffect(() => {
     if (maq && maq.id !== maqId) setMaqId(maq.id);
@@ -610,10 +718,25 @@ export function Operacao({ notify }: { notify: Notify }) {
   }, []);
 
   const dash = useQuery({
-    queryKey: ["op", maq?.id, "turno"],
-    enabled: !!maq?.id && !!ds,
-    queryFn: () => api.indicadores(paramsIndicadores({ ...FILTROS_PADRAO, periodo: "turno", maquina_id: maq.id }, ds, Date.now())),
-    placeholderData: keepPreviousData,
+    queryKey: ["op", maq?.id, ordemAberta?.id || "sem-ordem"],
+    enabled: !!maq?.id && !!ordemAberta?.id,
+    queryFn: () => {
+      if (!maq?.id || !ordemAberta?.id) return Promise.resolve(undefined);
+      return api.indicadores(
+        paramsIndicadores(
+          {
+            ...FILTROS_PADRAO,
+            periodo: "personalizado",
+            data_inicio: ordemAberta.inicio,
+            data_fim: Date.now(),
+            maquina_id: maq.id,
+            ordem_id: ordemAberta.id,
+          },
+          ds,
+          Date.now(),
+        ),
+      );
+    },
     refetchInterval: 15000,
   });
 
@@ -621,6 +744,7 @@ export function Operacao({ notify }: { notify: Notify }) {
 
   async function abrirMotivo(tipo: "parada" | "pausa" | "reclass" | "manut") {
     if (!maq) return;
+    setMotivoFixo(undefined);
     setSug([]);
     setModal(tipo);
     if (tipo === "manut") return;
@@ -632,13 +756,14 @@ export function Operacao({ notify }: { notify: Notify }) {
     }
   }
 
-  async function comFeedback(fn: () => Promise<void>, ok: string, tipo = "ok") {
+  async function comFeedback(fn: () => Promise<unknown>, ok: string, tipo = "ok") {
     if (ocupado) return;
     setOcupado(true);
     try {
-      await fn();
+      const r = await fn();
       await qc.invalidateQueries();
-      notify(ok, tipo);
+      if (r && (r as { offline?: boolean }).offline) notify("Sem rede. O apontamento ficou neste tablet e sobe quando a conexão voltar, sem duplicar.", "alerta");
+      else notify(ok, tipo);
     } catch (e: any) {
       notify(e.message || "Falha na ação", "erro");
     } finally {
@@ -675,22 +800,22 @@ export function Operacao({ notify }: { notify: Notify }) {
 
   const estadoId = maq.estado_atual && ESTADOS[maq.estado_atual] ? maq.estado_atual : "SEM_ORDEM";
   const def = ESTADOS[estadoId];
-  const ordem = (ds.ordens || []).find((o: any) => o.id === maq.ordem_atual_id);
+  const ordem = ordemAberta;
   const turno = janelaTurno(ds.turnos, Date.now());
-  const pecas = somaProducaoTurno(ds.eventos_producao, maq.id, turno.inicio, Date.now());
-  const ind = dash.data?.indicadores;
-  const meta = Number(ordem?.meta_qtd || maq.meta_turno || 0);
+  const pecas = somaProducaoOrdem(ds.eventos_producao, ordem?.id);
+  const ind = ordem ? dash.data?.indicadores : undefined;
+  const meta = Number(ordem?.meta_qtd || 0);
   const produzindo = estadoId === "PRODUZINDO";
   const emSetup = estadoId === "SETUP";
   const parado = def.classe !== "PRODUTIVO" && !emSetup;
   const motivoTxt = paradaAberta?.motivo_id
     ? `${nomeDe(ds.motivos, paradaAberta.motivo_id)}${paradaAberta.comentario ? ` · ${paradaAberta.comentario}` : ""}`
     : "";
-  const segs = (ds.eventos_estado || []).filter((e: any) => e.maquina_id === maq.id);
-  const ultimos = [...segs].slice(-8).reverse();
+  const segsOrdem = ordem ? (ds.eventos_estado || []).filter((e: any) => e.ordem_id === ordem.id) : [];
+  const ultimos = [...segsOrdem].slice(-8).reverse();
   const busy = ocupado;
-  const decorridoH = Math.max(0.001, (Date.now() - (turno.inicio || Date.now())) / 3600000);
-  const ritmo = pecas.total / decorridoH;
+  const decorridoH = Math.max(0.001, (Date.now() - (ordem?.inicio || Date.now())) / 3600000);
+  const ritmo = ordem ? pecas.total / decorridoH : 0;
   void tick;
 
   return (
@@ -724,7 +849,29 @@ export function Operacao({ notify }: { notify: Notify }) {
           </div>
           <div>
             <dt>Operador</dt>
-            <dd>{nomeDe(ds.operadores, maq.operador_atual_id || ordem?.operador_id)}</dd>
+            <dd>
+              {nomeDe(ds.operadores, maq.operador_atual_id || ordem?.operador_id)}
+              <form
+                className="op-cracha"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!matricula.trim()) return;
+                  comFeedback(async () => {
+                    const r = await api.assumirPosto({ maquina_id: maq.id, matricula: matricula.trim() });
+                    setMatricula("");
+                    return r;
+                  }, "Crachá reconhecido. Os próximos apontamentos ficam neste nome.");
+                }}
+              >
+                <label className="rotulo-campo" htmlFor="cracha">
+                  Crachá
+                </label>
+                <input id="cracha" value={matricula} onChange={(e) => setMatricula(e.target.value)} inputMode="numeric" placeholder="Matrícula" />
+                <button type="submit" className="botao botao--secundario" disabled={busy}>
+                  Assumir
+                </button>
+              </form>
+            </dd>
           </div>
         </dl>
       </section>
@@ -758,6 +905,26 @@ export function Operacao({ notify }: { notify: Notify }) {
         </div>
       ) : null}
 
+      {produzindo && ordem && pecas.total <= 0 && (Date.now() - Math.max(Number(maq.estado_desde) || turno.inicio, turno.inicio || 0)) / 1000 >= (ds.config?.sem_peca_min || 20) * 60 ? (
+        <div className="alerta-inconsistencia" role="alert">
+          <strong>Produzindo há {Math.floor((Date.now() - Math.max(Number(maq.estado_desde) || turno.inicio, turno.inicio || 0)) / 60000)} minutos sem peça.</strong> Lance a produção ou registre falta de material.
+          <button type="button" className="botao botao--primario" onClick={() => setModal("prod")}>
+            Registrar produção
+          </button>
+          <button
+            type="button"
+            className="botao botao--secundario"
+            onClick={() => {
+              setMotivoFixo("MOT-05");
+              setSug([]);
+              setModal("parada");
+            }}
+          >
+            Falta de material
+          </button>
+        </div>
+      ) : null}
+
       <section className="op-indicadores">
         <CardKPI rotulo="OEE" valor={pct(ind?.oee)} destaque faixa={faixaOee(ind?.oee, ds.config?.meta_oee)} detalhe={`Meta ${pct(ds.config?.meta_oee, 0)}`} />
         <CardKPI rotulo="Disponibilidade" valor={pct(ind?.disponibilidade)} />
@@ -765,13 +932,14 @@ export function Operacao({ notify }: { notify: Notify }) {
         <CardKPI rotulo="Qualidade" valor={pct(ind?.qualidade)} />
       </section>
 
-      <Painel titulo="Produção do turno">
+      <Painel titulo={ordem ? `Produção da ordem ${ordem.codigo}` : "Produção da ordem"}>
+        {ordem ? null : <p className="nota">Nenhuma ordem aberta. A produção da ordem anterior fica no histórico, não neste posto.</p>}
         <div className="op-producao">
-          <CardKPI rotulo="Produzido" valor={num(pecas.total)} />
-          <CardKPI rotulo="Aprovado" valor={num(pecas.aprovado)} />
-          <CardKPI rotulo="Rejeitado" valor={num(pecas.refugo)} detalhe={pecas.total ? pct(pecas.refugo / pecas.total) : "—"} />
-          <CardKPI rotulo="Retrabalho" valor={num(pecas.retrabalho)} />
-          {ind ? (
+          <CardKPI rotulo="Produzido" valor={num(ordem ? pecas.total : 0)} />
+          <CardKPI rotulo="Aprovado" valor={num(ordem ? pecas.aprovado : 0)} />
+          <CardKPI rotulo="Rejeitado" valor={num(ordem ? pecas.refugo : 0)} detalhe={ordem && pecas.total ? pct(pecas.refugo / pecas.total) : "—"} />
+          <CardKPI rotulo="Retrabalho" valor={num(ordem ? pecas.retrabalho : 0)} />
+          {ordem && ind ? (
             <>
               <CardKPI rotulo="Ritmo atual" valor={<>{num(ritmo)} <small>pç/h</small></>} />
               <CardKPI rotulo="Ciclo ideal" valor={<>{cicloTxt(ind.ciclo_ideal_seg).replace(" s", "")} <small>s</small></>} />
@@ -780,8 +948,9 @@ export function Operacao({ notify }: { notify: Notify }) {
           ) : null}
         </div>
         <div className="op-meta">
-          <span className="rotulo-campo">Meta do turno</span>
-          <BarraProgresso valor={pecas.total} meta={meta} rotulo="Meta do turno" />
+          <span className="rotulo-campo">{ordem ? "Meta da ordem" : "Meta"}</span>
+          <BarraProgresso valor={ordem ? pecas.total : 0} meta={meta} rotulo="Meta da ordem" />
+          {ordem ? <p className="nota">{fraseMeta(pecas.total, meta, ritmo, turno.fim || Date.now())}</p> : null}
         </div>
       </Painel>
 
@@ -819,6 +988,7 @@ export function Operacao({ notify }: { notify: Notify }) {
               />
               <BotaoOp icone="⚒" rotulo="Solicitar manutenção" tom="alerta" disabled={busy} onClick={() => abrirMotivo("manut")} />
               <BotaoOp icone="✎" rotulo="Adicionar observação" disabled={busy} onClick={() => setModal("obs")} />
+              <BotaoOp icone="⇄" rotulo="Passagem de turno" disabled={busy} onClick={() => setModal("passagem")} />
               <BotaoOp
                 icone="⏏"
                 rotulo="Finalizar ordem"
@@ -834,8 +1004,12 @@ export function Operacao({ notify }: { notify: Notify }) {
         </div>
       </Painel>
 
-      <Painel titulo="Linha do tempo do turno">
-        <Timeline segmentos={segs} inicio={turno.inicio} fim={Math.min(turno.fim || Date.now(), Date.now())} />
+      <Painel titulo="Linha do tempo da ordem">
+        {ordem ? (
+          <Timeline segmentos={segsOrdem} inicio={ordem.inicio || turno.inicio} fim={Date.now()} />
+        ) : (
+          <p className="vazio">Sem ordem aberta.</p>
+        )}
         <LegendaEstados />
       </Painel>
 
@@ -856,6 +1030,7 @@ export function Operacao({ notify }: { notify: Notify }) {
           titulo={modal === "pausa" ? "Motivo da pausa" : modal === "reclass" ? "Alterar motivo da parada" : modal === "manut" ? "Solicitar manutenção" : "Registrar parada"}
           motivos={ds.motivos || []}
           sugestoes={sug}
+          motivoInicial={motivoFixo}
           filtroCategoria={modal === "manut" ? "Máquina" : undefined}
           onClose={() => setModal(null)}
           onOk={async (motivoId, comentario, sugestaoPosicao) => {
@@ -883,8 +1058,9 @@ export function Operacao({ notify }: { notify: Notify }) {
           onClose={() => setModal(null)}
           onOk={async (n) => {
             await comFeedback(async () => {
-              await api.apontar({ maquina_id: maq.id, qtd_total: n });
+              const r = await api.apontar({ maquina_id: maq.id, qtd_total: n });
               setModal(null);
+              return r;
             }, `${n} peças registradas.`);
           }}
         />
@@ -894,11 +1070,12 @@ export function Operacao({ notify }: { notify: Notify }) {
           titulo="Registrar refugo"
           pedirCausa
           onClose={() => setModal(null)}
-          onOk={async (n, causa) => {
+          onOk={async (n, causa, destas) => {
             await comFeedback(async () => {
-              await api.apontar({ maquina_id: maq.id, qtd_total: n, qtd_refugo: n, causa_refugo: causa });
+              const r = await api.apontar({ maquina_id: maq.id, qtd_total: destas ? 0 : n, qtd_refugo: n, causa_refugo: causa });
               setModal(null);
-            }, `${n} peças de refugo registradas.`, "alerta");
+              return r;
+            }, destas ? `${n} peças saíram de aprovado para rejeitado.` : `${n} peças de refugo registradas.`, "alerta");
           }}
         />
       )}
@@ -926,6 +1103,49 @@ export function Operacao({ notify }: { notify: Notify }) {
           }}
         />
       )}
+      {modal === "passagem" && ordem ? (
+        <ModalShell
+          titulo={`Passagem — ${turno.nome}`}
+          onClose={() => setModal(null)}
+          rodape={
+            <>
+              <button type="button" className="botao botao--secundario" onClick={() => setModal(null)}>
+                Fechar
+              </button>
+              <button
+                type="button"
+                className="botao botao--primario"
+                onClick={() =>
+                  comFeedback(async () => {
+                    const texto = [
+                      `Passagem ${turno.nome}. Ordem ${ordem.codigo}.`,
+                      `Produzido ${pecas.total}, rejeitado ${pecas.refugo}, aprovado ${pecas.aprovado}.`,
+                      fraseMeta(pecas.total, meta, ritmo, turno.fim || Date.now()),
+                      paradaAberta ? `Parada ainda aberta desde ${hora(paradaAberta.inicio)}.` : "Nenhuma parada aberta.",
+                      notaPassagem.trim() ? `Para o próximo: ${notaPassagem.trim()}` : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
+                    await api.observacao({ maquina_id: maq.id, texto });
+                    setNotaPassagem("");
+                    setModal(null);
+                  }, "Passagem registrada para o próximo operador.")
+                }
+              >
+                Deixar para o próximo
+              </button>
+            </>
+          }
+        >
+          <div className="formulario">
+            <p>Ordem {ordem.codigo}. Produzido {num(pecas.total)}, rejeitado {num(pecas.refugo)}, aprovado {num(pecas.aprovado)}.</p>
+            <p>{fraseMeta(pecas.total, meta, ritmo, turno.fim || Date.now())}</p>
+            <p>{paradaAberta ? `Parada ainda aberta desde ${hora(paradaAberta.inicio)}.` : "Nenhuma parada aberta."}</p>
+            <label htmlFor="passagem-nota">O que o próximo operador precisa saber</label>
+            <textarea id="passagem-nota" rows={3} value={notaPassagem} onChange={(e) => setNotaPassagem(e.target.value)} />
+          </div>
+        </ModalShell>
+      ) : null}
       {modal === "ordem" && (
         <ModalOrdem
           produtos={ds.produtos || []}
@@ -1640,7 +1860,17 @@ type CampoCad = {
 const ENTIDADES: Record<string, { rotulo: string; singular: string; campos: CampoCad[]; colunas: string[] }> = {
   plantas: { rotulo: "Plantas", singular: "planta", campos: [{ k: "nome", r: "Nome", tipo: "texto", obrigatorio: true }, { k: "cidade", r: "Cidade", tipo: "texto" }], colunas: ["nome", "cidade"] },
   areas: { rotulo: "Áreas", singular: "área", campos: [{ k: "nome", r: "Nome", tipo: "texto", obrigatorio: true }, { k: "planta_id", r: "Planta", tipo: "ref", colecao: "plantas", obrigatorio: true }], colunas: ["nome", "planta_id"] },
-  linhas: { rotulo: "Linhas", singular: "linha", campos: [{ k: "nome", r: "Nome", tipo: "texto", obrigatorio: true }, { k: "area_id", r: "Área", tipo: "ref", colecao: "areas", obrigatorio: true }], colunas: ["nome", "area_id"] },
+  linhas: {
+    rotulo: "Linhas",
+    singular: "linha",
+    campos: [
+      { k: "nome", r: "Nome", tipo: "texto", obrigatorio: true },
+      { k: "area_id", r: "Área", tipo: "ref", colecao: "areas", obrigatorio: true },
+      { k: "parada_longa_min", r: "Parada longa (min, vazio = geral)", tipo: "numero", min: 1 },
+      { k: "sem_peca_min", r: "Sem peça (min, vazio = geral)", tipo: "numero", min: 1 },
+    ],
+    colunas: ["nome", "area_id", "parada_longa_min", "sem_peca_min"],
+  },
   maquinas: {
     rotulo: "Máquinas",
     singular: "máquina",
@@ -1831,6 +2061,10 @@ export function Cadastros({ notify }: { notify: Notify }) {
                     meta_setup_min: Number(fd.get("meta_setup_min")),
                     meta_refugo_pct: Number(fd.get("meta_refugo_pct")) / 100,
                     limite_microparada_seg: Number(fd.get("limite_microparada_seg")),
+                    parada_longa_min: Number(fd.get("parada_longa_min")),
+                    sem_peca_min: Number(fd.get("sem_peca_min")),
+                    retrabalho_na_qualidade: fd.get("retrabalho_na_qualidade") === "on",
+                    alerta_webhook_url: String(fd.get("alerta_webhook_url") || ""),
                   });
                   await qc.invalidateQueries({ queryKey: ["cfg"] });
                   notify("Metas salvas.");
@@ -1847,6 +2081,15 @@ export function Cadastros({ notify }: { notify: Notify }) {
               <input id="m-refugo" name="meta_refugo_pct" type="number" min={0} max={100} step={0.1} defaultValue={((cfg.data.meta_refugo_pct || 0.02) * 100).toFixed(1)} />
               <label htmlFor="m-micro">Limite de microparada (s)</label>
               <input id="m-micro" name="limite_microparada_seg" type="number" min={10} step={10} defaultValue={cfg.data.limite_microparada_seg || 300} />
+              <label htmlFor="m-longa">Parada longa (min)</label>
+              <input id="m-longa" name="parada_longa_min" type="number" min={1} step={1} defaultValue={cfg.data.parada_longa_min || 15} />
+              <label htmlFor="m-sempeca">Produzindo sem peça (min)</label>
+              <input id="m-sempeca" name="sem_peca_min" type="number" min={1} step={1} defaultValue={cfg.data.sem_peca_min || 20} />
+              <label htmlFor="m-retrab">
+                <input id="m-retrab" name="retrabalho_na_qualidade" type="checkbox" defaultChecked={!!cfg.data.retrabalho_na_qualidade} /> Retrabalho conta como perda de qualidade
+              </label>
+              <label htmlFor="m-hook">Endereço para aviso de alerta crítico</label>
+              <input id="m-hook" name="alerta_webhook_url" type="url" placeholder="https://..." defaultValue={cfg.data.alerta_webhook_url || ""} />
               <div />
               <button type="submit" className="botao botao--primario">
                 Salvar metas

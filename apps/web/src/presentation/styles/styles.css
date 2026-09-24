@@ -893,6 +893,83 @@ textarea { resize: vertical; }
   font-size: .88rem;
 }
 
+.painel-alertas { padding: 1.15rem 1.25rem 1.3rem; }
+
+.alertas-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.9rem;
+}
+
+.alerta-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  width: 100%;
+  min-height: 7.25rem;
+  padding: 1rem 1.1rem 1.05rem;
+  text-align: left;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-left: 4px solid var(--ambar);
+  border-radius: var(--raio);
+  color: inherit;
+  cursor: pointer;
+}
+
+.alerta-card--critico { border-left-color: var(--vermelho); }
+
+.alerta-card:hover { background: var(--superficie-alta); }
+
+.alerta-card:focus-visible {
+  outline: 2px solid var(--ambar);
+  outline-offset: 2px;
+}
+
+.alerta-card__selo {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ambar-texto);
+}
+
+.alerta-card--critico .alerta-card__selo { color: var(--vermelho); }
+
+.alerta-card__titulo {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.alerta-card__acao {
+  color: var(--texto-suave);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.alerta-card__abrir {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.op-cracha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: end;
+  margin-top: 0.4rem;
+}
+
 /* --------------------------------------------------------------------- */
 /* 15. Responsividade                                                     */
 /* --------------------------------------------------------------------- */

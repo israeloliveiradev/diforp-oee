@@ -193,6 +193,7 @@ function Login({ onOk }: { onOk: (s: any) => void }) {
     try {
       const r = await api.login(login, senha);
       setToken(r.access_token);
+      if (r.planta_id) localStorage.setItem("oee.planta", r.planta_id);
       onOk(r);
     } catch (err: any) {
       setErro(err.message || "Falha no login");
