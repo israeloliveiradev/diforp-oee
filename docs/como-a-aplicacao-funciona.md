@@ -169,13 +169,10 @@ O chat não liga, não desliga e não aponta na máquina. Ele lê e orienta.
 - Sem `GEMINI_API_KEY`, o passo a passo do manual não responde. O status, o OEE e as paradas do posto continuam saindo direto do banco.
 - Na virada (06:00, 14:00 e 22:00, horário de São Paulo) o estado aberto fecha e reabre no turno novo. O relógio do posto conta o tempo neste turno. O OEE não herda a hora de ontem.
 - A visão geral da gestão lista o que pede ação: parada não planejada passando de 15 minutos, máquina produzindo há 20 minutos sem peça no turno, e refugo acima da meta.
+- A máquina pode avisar `POST /operacao/sinal` quando para ou volta a produzir. A parada chega sem motivo. O posto mostra o aviso e o operador confirma a causa. O modelo continua sem comandar o equipamento.
 
 ## Versões possíveis
 
-**Versão atual.** Posto e gestão no browser, OEE no servidor, manuais em PDF, chat com procedimento e com status, ACMP, auditoria e dados de demonstração. Publicação por túnel Cloudflare.
+**Versão atual.** Posto e gestão no browser, OEE no servidor, manuais em PDF, chat de procedimento com o modelo e chat de posto direto do banco, ACMP, auditoria, virada de turno, alertas da gestão e sinal de parada com confirmação do motivo. Publicação por túnel Cloudflare.
 
-**Próxima versão, ainda neste produto.** Operação com cartão estável, parada abrindo na hora, consulta só da máquina, chat com OEE do turno, meta, última peça e turno anterior, e segredos de demonstração trocados no servidor.
-
-**Versão seguinte.** Alertas para a gestão quando uma parada passa do tempo ou o refugo sobe. Mais de uma planta de verdade, com o mesmo contrato de telas. Retreino do ACMP com as paradas que o operador classificou, e a tela mostrando se a sugestão está acertando.
-
-**Versão de chão de fábrica.** O estado deixa de depender só do apontamento manual e passa a receber sinal da máquina, com o operador confirmando o motivo. O tablet segue útil sem rede por um tempo e sincroniza depois. O chat continua sem comandar o equipamento: ele explica o passo e mostra o que o posto já registrou.
+**Versão seguinte.** O tablet segue um tempo sem rede e sincroniza depois. O sinal deixa o simulador e passa a vir do CLP, no mesmo `POST /operacao/sinal`. Mais plantas reais no mesmo contrato de telas.

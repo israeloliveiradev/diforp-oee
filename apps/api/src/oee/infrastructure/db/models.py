@@ -81,6 +81,7 @@ class Maquina(Base):
     operador_atual_id = Column(String(64), nullable=True)
     meta_turno = Column(Float, default=0)
     ativa = Column(Boolean, default=True)
+    sinal_sem_motivo = Column(Boolean, default=False, server_default="false")
     produtos_habilitados = Column(JSON, default=list)
 
 

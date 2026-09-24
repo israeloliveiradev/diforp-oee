@@ -35,6 +35,9 @@ def criar_tabelas() -> None:
             conn.commit()
         except Exception:
             log.warning("índice pgvector não criado nesta instância (extensão ou versão)")
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE maquinas ADD COLUMN IF NOT EXISTS sinal_sem_motivo BOOLEAN NOT NULL DEFAULT FALSE"))
+        conn.commit()
 
 
 def _senha(definida: str, padrao: str) -> str:

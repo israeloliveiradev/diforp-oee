@@ -749,6 +749,15 @@ export function Operacao({ notify }: { notify: Notify }) {
         </div>
       </section>
 
+      {maq.sinal_sem_motivo ? (
+        <div className="alerta-inconsistencia" role="alert">
+          <strong>A máquina sinalizou parada.</strong> Confirme o motivo para o tempo não ficar sem causa.
+          <button type="button" className="botao botao--primario" onClick={() => abrirMotivo(paradaAberta ? "reclass" : "parada")}>
+            Confirmar motivo
+          </button>
+        </div>
+      ) : null}
+
       <section className="op-indicadores">
         <CardKPI rotulo="OEE" valor={pct(ind?.oee)} destaque faixa={faixaOee(ind?.oee, ds.config?.meta_oee)} detalhe={`Meta ${pct(ds.config?.meta_oee, 0)}`} />
         <CardKPI rotulo="Disponibilidade" valor={pct(ind?.disponibilidade)} />

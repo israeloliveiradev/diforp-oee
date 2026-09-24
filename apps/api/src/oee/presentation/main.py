@@ -40,6 +40,7 @@ from oee.presentation.schemas import (
     AcmpDesfechoIn,
     ChatIn,
     ConfigIn,
+    SinalIn,
     EstadoIn,
     LoginIn,
     ObservacaoIn,
@@ -249,6 +250,14 @@ def api_parada(body: ParadaIn, db: Session = Depends(db_dep), user: dict = Depen
         raise HTTPException(400, "Motivo inválido")
     origem = "OPERADOR" if user.get("papel") == "operador" else "GESTAO"
     return op.mudar_estado(db, body.maquina_id, motivo.estado_sugerido, user.get("nome"), origem, body.motivo_id, body.comentario, body.acao or "PARADA_INICIADA")
+
+
+@app.post("/operacao/sinal")
+def api_sinal(body: SinalIn, db: Session = Depends(db_dep), user: dict = Depends(usuario_atual)):
+    try:
+        return op.registrar_sinal(db, body.maquina_id, body.produzindo, user.get("nome") or "sinal", "SINAL")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/operacao/producao")

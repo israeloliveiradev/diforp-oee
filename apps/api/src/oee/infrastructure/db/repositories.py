@@ -64,6 +64,7 @@ def snapshot(db: Session, maquina_id: str | None = None, desde_ms: int | None = 
                 "operador_atual_id": x.operador_atual_id,
                 "meta_turno": x.meta_turno,
                 "ativa": x.ativa,
+                "sinal_sem_motivo": bool(x.sinal_sem_motivo),
                 "produtos_habilitados": x.produtos_habilitados or [],
             }
             for x in db.scalars(select(m.Maquina))

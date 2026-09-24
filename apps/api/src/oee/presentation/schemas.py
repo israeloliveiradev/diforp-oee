@@ -18,6 +18,11 @@ class TokenOut(BaseModel):
     sub: str
 
 
+class SinalIn(BaseModel):
+    maquina_id: str
+    produzindo: bool
+
+
 class ParadaIn(BaseModel):
     maquina_id: str
     motivo_id: str

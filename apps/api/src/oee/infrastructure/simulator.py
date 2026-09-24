@@ -7,7 +7,7 @@ import time
 
 from sqlalchemy.orm import Session
 
-from oee.application.operacao import apontar_producao, mudar_estado
+from oee.application.operacao import apontar_producao, mudar_estado, registrar_sinal
 from oee.domain.catalog import PERFIS
 from oee.infrastructure.db import models as m
 from oee.infrastructure.db.repositories import snapshot
@@ -42,11 +42,8 @@ def tick(db: Session) -> dict:
             refugo = 1 if random.random() < random.uniform(*perfil["refugo_pct"]) else 0
             apontar_producao(db, maq["id"], qtd, refugo, 0, None, usuario, origem)
             if decorrido > random.uniform(*perfil["duracao_producao_min"]) * 60:
-                motivos = [mo for mo in ds["motivos"] if not mo["planejada"]]
-                if motivos:
-                    mo = random.choice(motivos)
-                    mudar_estado(db, maq["id"], mo["estado_sugerido"], usuario, origem, mo["id"])
+                registrar_sinal(db, maq["id"], False, "sinal", "SINAL")
         else:
             if decorrido > random.uniform(*perfil["duracao_parada_min"]) * 60:
-                mudar_estado(db, maq["id"], "PRODUZINDO", usuario, origem)
+                registrar_sinal(db, maq["id"], True, "sinal", "SINAL")
     return {"ok": True, "ts": agora}

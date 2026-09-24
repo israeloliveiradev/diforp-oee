@@ -61,6 +61,12 @@ paths:
           schema: { type: string }
       responses:
         "200": { description: dashboard }
+  /operacao/sinal:
+    post:
+      tags: [operacao]
+      summary: Sinal da máquina (produzindo ou parada sem motivo)
+      responses:
+        "200": { description: estado e se o motivo está pendente }
   /operacao/paradas:
     post:
       tags: [operacao, paradas]

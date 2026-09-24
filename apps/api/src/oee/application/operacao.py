@@ -46,7 +46,11 @@ def mudar_estado(
     motivo_id: str | None = None,
     comentario: str = "",
     acao: str | None = None,
+    aguardando_motivo: bool = False,
 ) -> dict[str, Any]:
+    from oee.application.turno import virar_turnos
+
+    virar_turnos(db)
     maq = db.get(m.Maquina, maquina_id)
     if not maq:
         raise ValueError("Máquina não encontrada")
@@ -91,6 +95,7 @@ def mudar_estado(
         acao_aud = acao or ("PARADA_FINALIZADA" if ESTADOS.get(anterior, {}).get("classe") != "PRODUTIVO" else "ESTADO_ALTERADO")
     maq.estado_atual = novo_estado
     maq.estado_desde = ts
+    maq.sinal_sem_motivo = bool(aguardando_motivo and not motivo_id and classe and classe != "PRODUTIVO")
     _auditar(
         db,
         {
@@ -110,7 +115,7 @@ def mudar_estado(
     )
     db.commit()
     db.refresh(maq)
-    return {"maquina_id": maquina_id, "estado": novo_estado, "desde": ts}
+    return {"maquina_id": maquina_id, "estado": novo_estado, "desde": ts, "aguardando_motivo": bool(maq.sinal_sem_motivo)}
 
 
 def apontar_producao(
@@ -123,6 +128,9 @@ def apontar_producao(
     usuario: str,
     origem: str = "OPERADOR",
 ) -> dict[str, Any]:
+    from oee.application.turno import virar_turnos
+
+    virar_turnos(db)
     maq = db.get(m.Maquina, maquina_id)
     if not maq:
         raise ValueError("Máquina não encontrada")
@@ -189,12 +197,14 @@ def reclassificar_parada(db: Session, parada_id: str, motivo_id: str, comentario
         .filter(m.EventoEstado.maquina_id == parada.maquina_id, m.EventoEstado.fim.is_(None))
         .first()
     )
+    maq = db.get(m.Maquina, parada.maquina_id)
     if ev:
         ev.motivo_id = motivo_id
         ev.estado = motivo.estado_sugerido
-        maq = db.get(m.Maquina, parada.maquina_id)
         if maq:
             maq.estado_atual = motivo.estado_sugerido
+    if maq:
+        maq.sinal_sem_motivo = False
     _auditar(
         db,
         {
@@ -346,3 +356,28 @@ def registrar_observacao(db: Session, maquina_id: str, texto: str, usuario: str)
     )
     db.commit()
     return {"id": obs.id}
+
+
+def registrar_sinal(db: Session, maquina_id: str, produzindo: bool, usuario: str = "sinal", origem: str = "SINAL") -> dict[str, Any]:
+    """A máquina avisa se está produzindo. Parada chega sem motivo, para o operador confirmar."""
+    maq = db.get(m.Maquina, maquina_id)
+    if not maq:
+        raise ValueError("Máquina não encontrada")
+    if produzindo:
+        if maq.estado_atual != "PRODUZINDO":
+            return mudar_estado(db, maquina_id, "PRODUZINDO", usuario, origem, acao="SINAL_PRODUZINDO")
+        if maq.sinal_sem_motivo:
+            maq.sinal_sem_motivo = False
+            db.commit()
+        return {"maquina_id": maquina_id, "estado": "PRODUZINDO", "aguardando_motivo": False}
+    if maq.estado_atual == "PRODUZINDO":
+        return mudar_estado(
+            db,
+            maquina_id,
+            "PARADA_NAO_PLANEJADA",
+            usuario,
+            origem,
+            acao="SINAL_PARADA",
+            aguardando_motivo=True,
+        )
+    return {"maquina_id": maquina_id, "estado": maq.estado_atual, "aguardando_motivo": bool(maq.sinal_sem_motivo)}
