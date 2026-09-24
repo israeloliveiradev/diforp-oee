@@ -457,6 +457,7 @@ function ModalTexto({
 export function VisaoGeral() {
   const nav = useNavigate();
   const { f, setF, ds, dash } = useGestao();
+  const alertas = useQuery({ queryKey: ["alertas"], queryFn: api.alertas, refetchInterval: 20000 });
   const data = dash.data;
   const ind = data?.indicadores;
   const meta = ds.data?.config?.meta_oee;
@@ -467,6 +468,21 @@ export function VisaoGeral() {
   return (
     <>
       <BarraFiltros ds={ds.data || {}} f={f} setF={setF} />
+      {(alertas.data || []).length ? (
+        <div className="alerta-inconsistencia" role="alert">
+          <strong>Para agir agora.</strong>
+          <ul>
+            {(alertas.data || []).map((a: any) => (
+              <li key={`${a.tipo}-${a.maquina_id}`}>
+                <button type="button" className="botao botao--pequeno" onClick={() => abrirOperacao(a.maquina_id, nav)}>
+                  {a.titulo}
+                </button>
+                <span> {a.acao}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {dash.isError ? <p className="erro-campo">Erro ao carregar indicadores.</p> : null}
       {dash.isLoading || !ind ? (
         <p className="vazio">Carregando indicadores...</p>

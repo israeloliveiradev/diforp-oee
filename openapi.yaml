@@ -42,6 +42,12 @@ paths:
                 senha: { type: string }
       responses:
         "200": { description: token }
+  /alertas:
+    get:
+      tags: [indicadores]
+      summary: Parada longa, turno sem peça e refugo acima da meta
+      responses:
+        "200": { description: lista para a gestão }
   /indicadores:
     get:
       tags: [indicadores]

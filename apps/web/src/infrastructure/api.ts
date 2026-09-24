@@ -60,6 +60,7 @@ export const api = {
     return req<any>(`/dataset${q ? `?${q}` : ""}`);
   },
   indicadores: (q: string) => req<any>(`/indicadores?${q}`),
+  alertas: () => req<any[]>("/alertas"),
   insights: (q: string) => req<any>(`/insights?${q}`),
   paradas: (maq?: string) => req<any[]>(`/eventos/paradas${maq ? `?maquina_id=${maq}` : ""}`),
   producao: (maq?: string) => req<any[]>(`/eventos/producao${maq ? `?maquina_id=${maq}` : ""}`),

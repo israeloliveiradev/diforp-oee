@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from oee.application import indicadores as ind
+from oee.application.alertas import listar_alertas
 from oee.application import operacao as op
 from oee.application.turno import virar_turnos
 from oee.application.operacao import _auditar
@@ -319,6 +320,11 @@ def _filtros(
         "turno_id": turno_id,
         "operador_id": operador_id,
     }
+
+
+@app.get("/alertas")
+def api_alertas(db: Session = Depends(db_dep), user: dict = Depends(exigir_gestao)):
+    return listar_alertas(db)
 
 
 @app.get("/indicadores")
