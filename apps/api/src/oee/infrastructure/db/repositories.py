@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from oee.infrastructure.db import models as m
@@ -14,7 +14,24 @@ def _row(obj, campos: list[str]) -> dict[str, Any]:
     return {c: getattr(obj, c) for c in campos}
 
 
-def snapshot(db: Session) -> dict[str, Any]:
+def _q_eventos(q, modelo, maquina_id: str | None, desde_ms: int | None):
+    if maquina_id:
+        q = q.where(modelo.maquina_id == maquina_id)
+    if desde_ms:
+        q = q.where(or_(modelo.fim.is_(None), modelo.fim >= desde_ms, modelo.inicio >= desde_ms))
+    return q
+
+
+def _q_producao(maquina_id: str | None, desde_ms: int | None):
+    q = select(m.EventoProducao)
+    if maquina_id:
+        q = q.where(m.EventoProducao.maquina_id == maquina_id)
+    if desde_ms:
+        q = q.where(m.EventoProducao.ts >= desde_ms)
+    return q
+
+
+def snapshot(db: Session, maquina_id: str | None = None, desde_ms: int | None = None, sem_auditoria: bool = False) -> dict[str, Any]:
     cfg = db.get(m.ConfigApp, "default")
     config = {
         "meta_oee": cfg.meta_oee if cfg else 0.75,
@@ -64,24 +81,24 @@ def snapshot(db: Session) -> dict[str, Any]:
         ],
         "eventos_estado": [
             _row(x, ["id", "maquina_id", "ordem_id", "turno_id", "estado", "motivo_id", "inicio", "fim"])
-            for x in db.scalars(select(m.EventoEstado))
+            for x in db.scalars(_q_eventos(select(m.EventoEstado), m.EventoEstado, maquina_id, desde_ms))
         ],
         "eventos_producao": [
             _row(
                 x,
                 ["id", "maquina_id", "ordem_id", "turno_id", "produto_id", "operador_id", "ts", "qtd_total", "qtd_refugo", "qtd_retrabalho", "causa_refugo", "origem"],
             )
-            for x in db.scalars(select(m.EventoProducao))
+            for x in db.scalars(_q_producao(maquina_id, desde_ms))
         ],
         "eventos_parada": [
             _row(
                 x,
                 ["id", "maquina_id", "ordem_id", "turno_id", "estado", "motivo_id", "categoria", "planejada", "inicio", "fim", "duracao_seg", "comentario"],
             )
-            for x in db.scalars(select(m.EventoParada))
+            for x in db.scalars(_q_eventos(select(m.EventoParada), m.EventoParada, maquina_id, desde_ms))
         ],
         "observacoes": [_row(x, ["id", "maquina_id", "ordem_id", "ts", "texto", "autor_id"]) for x in db.scalars(select(m.Observacao))],
-        "auditoria": [
+        "auditoria": [] if sem_auditoria else [
             {
                 "id": x.id,
                 "ts": x.ts,

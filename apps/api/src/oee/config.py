@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost,http://localhost:5173"
     demo_dias: int = 7
     demo_seed: int = 20240517
+    demo_senha_gestao: str = ""
+    demo_senha_operador: str = ""
     models_dir: str = "models/acmp"
     uploads_dir: str = "uploads/manuais"
 

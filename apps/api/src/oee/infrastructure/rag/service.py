@@ -10,6 +10,7 @@ from typing import Any, Literal
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from oee.application.posto import contexto_posto, tipo_pergunta
 from oee.config import settings
 from oee.domain.ids import novo_id
 from oee.domain.rag import chunk_text, nome_arquivo_seguro, validar_pdf
@@ -200,25 +201,84 @@ SYSTEM = (
     "não copie parágrafos; não diga 'com base no manual'."
 )
 
+SYSTEM_POSTO = (
+    "Você responde o operador com os dados reais do posto, em português simples. "
+    "Sem markdown. No máximo 6 linhas. "
+    "Use somente o bloco DADOS. Não invente hora, peça, motivo, estado ou nome. "
+    "Comece pelo que foi perguntado: status, última parada, produção, OEE, meta ou comparação com o turno anterior. "
+    "Se o número não estiver nos DADOS, diga: Não tenho esse número agora."
+)
+
+
+def _gerar(prompt: str) -> str:
+    client = _cliente_gemini()
+    resp = client.models.generate_content(model=settings.gemini_chat_model, contents=prompt)
+    return getattr(resp, "text", None) or "Não foi possível gerar a resposta."
+
+
+def _guardar(db: Session, pergunta: str, resposta: str, relevantes: list[dict], maquina_id: str | None, usuario_id: str) -> dict[str, Any]:
+    citacoes = [{k: v for k, v in h.items() if k != "texto"} for h in relevantes]
+    agora = int(time.time() * 1000)
+    sessao = m.ChatSessao(id=novo_id("CHS"), usuario_id=usuario_id, maquina_id=maquina_id, criado_em=agora)
+    db.add(sessao)
+    db.flush()
+    db.add(m.ChatMensagem(id=novo_id("CHM"), sessao_id=sessao.id, papel="user", texto=pergunta, ts=agora))
+    db.add(
+        m.ChatMensagem(
+            id=novo_id("CHM"),
+            sessao_id=sessao.id,
+            papel="assistant",
+            texto=resposta,
+            citacoes=citacoes,
+            ts=agora,
+        )
+    )
+    db.commit()
+    return {"resposta": resposta, "citacoes": citacoes, "sessao_id": sessao.id}
+
 
 def consultar(db: Session, pergunta: str, maquina_id: str | None, usuario_id: str) -> dict[str, Any]:
+    texto = (pergunta or "").strip()
+    if not texto:
+        return {"resposta": "Escreva a pergunta.", "citacoes": [], "sessao_id": None}
+    tipo = tipo_pergunta(texto)
+    fatos = contexto_posto(db, maquina_id, texto) if tipo in ("posto", "ambos") else ""
+    if tipo == "posto":
+        if not fatos:
+            return {"resposta": "Escolha a máquina ou diga o nome dela.", "citacoes": [], "sessao_id": None}
+        if not settings.gemini_api_key:
+            return {"resposta": fatos, "citacoes": [], "sessao_id": None}
+        try:
+            resposta = _gerar(f"{SYSTEM_POSTO}\n\nDADOS:\n{fatos}\n\nPERGUNTA:\n{texto}")
+        except Exception:
+            log.exception("falha ao responder com dados do posto")
+            resposta = fatos
+        return _guardar(db, texto, resposta, [], maquina_id, usuario_id)
+
     if not settings.gemini_api_key:
         return {
             "resposta": "O chat de manuais está indisponível: GEMINI_API_KEY não foi configurada neste ambiente.",
             "citacoes": [],
             "sessao_id": None,
         }
-    if not (pergunta or "").strip():
-        return {"resposta": "Escreva a pergunta sobre o procedimento.", "citacoes": [], "sessao_id": None}
     if not db.query(m.Manual).filter(m.Manual.status == "pronto").first():
+        if fatos:
+            return {"resposta": fatos, "citacoes": [], "sessao_id": None}
         return {
             "resposta": "Ainda não há manuais indexados. Envie um PDF na tela Manuais e aguarde o status Pronto.",
             "citacoes": [],
             "sessao_id": None,
         }
-    hits = recuperar(db, pergunta.strip(), maquina_id)
+    hits = recuperar(db, texto, maquina_id)
     relevantes = [h for h in hits if h.get("score") is None or h["score"] <= DISTANCIA_MAX]
     if not relevantes:
+        if fatos:
+            try:
+                resposta = _gerar(f"{SYSTEM_POSTO}\n\nDADOS:\n{fatos}\n\nPERGUNTA:\n{texto}")
+            except Exception:
+                log.exception("falha ao responder com dados do posto")
+                resposta = fatos
+            return _guardar(db, texto, resposta, [], maquina_id, usuario_id)
         return {
             "resposta": "Não encontrei trechos nos manuais indexados para esta pergunta. Não é seguro inventar o procedimento.",
             "citacoes": [],
@@ -226,11 +286,9 @@ def consultar(db: Session, pergunta: str, maquina_id: str | None, usuario_id: st
         }
 
     contexto = "\n\n".join(f"[{h['titulo']} p.{h['pagina']}] {h.get('texto') or h['trecho']}" for h in relevantes)
+    bloco_posto = f"\n\nDADOS DO POSTO AGORA:\n{fatos}" if fatos else ""
     try:
-        client = _cliente_gemini()
-        prompt = f"{SYSTEM}\n\nMANUAIS:\n{contexto}\n\nPERGUNTA DO OPERADOR:\n{pergunta.strip()}"
-        resp = client.models.generate_content(model=settings.gemini_chat_model, contents=prompt)
-        resposta = getattr(resp, "text", None) or "Não foi possível gerar a resposta."
+        resposta = _gerar(f"{SYSTEM}\n\nMANUAIS:\n{contexto}{bloco_posto}\n\nPERGUNTA DO OPERADOR:\n{texto}")
     except Exception:
         log.exception("falha ao gerar resposta do chat")
         return {
@@ -238,27 +296,7 @@ def consultar(db: Session, pergunta: str, maquina_id: str | None, usuario_id: st
             "citacoes": [{k: v for k, v in h.items() if k != "texto"} for h in relevantes],
             "sessao_id": None,
         }
-    agora = int(time.time() * 1000)
-    sessao = m.ChatSessao(id=novo_id("CHS"), usuario_id=usuario_id, maquina_id=maquina_id, criado_em=agora)
-    db.add(sessao)
-    db.flush()
-    db.add(m.ChatMensagem(id=novo_id("CHM"), sessao_id=sessao.id, papel="user", texto=pergunta.strip(), ts=agora))
-    db.add(
-        m.ChatMensagem(
-            id=novo_id("CHM"),
-            sessao_id=sessao.id,
-            papel="assistant",
-            texto=resposta,
-            citacoes=[{k: v for k, v in h.items() if k != "texto"} for h in relevantes],
-            ts=agora,
-        )
-    )
-    db.commit()
-    return {
-        "resposta": resposta,
-        "citacoes": [{k: v for k, v in h.items() if k != "texto"} for h in relevantes],
-        "sessao_id": sessao.id,
-    }
+    return _guardar(db, texto, resposta, relevantes, maquina_id, usuario_id)
 
 
 def excluir_manual(db: Session, manual_id: str) -> None:

@@ -49,8 +49,7 @@ export function qs(f: Record<string, string | number | undefined | null>) {
   return p.toString();
 }
 
-export function paramsIndicadores(f: Record<string, any>, ds?: any) {
-  const agora = Date.now();
+export function paramsIndicadores(f: Record<string, any>, ds?: any, agora = Date.now()) {
   const base: Record<string, string | number | undefined> = {
     planta_id: f.planta_id,
     area_id: f.area_id,

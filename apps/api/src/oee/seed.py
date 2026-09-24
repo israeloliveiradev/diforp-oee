@@ -37,20 +37,34 @@ def criar_tabelas() -> None:
             log.warning("índice pgvector não criado nesta instância (extensão ou versão)")
 
 
+def _senha(definida: str, padrao: str) -> str:
+    return definida.strip() or padrao
+
+
 def garantir_usuarios(db) -> None:
-    if db.scalars(select(m.Usuario).where(m.Usuario.login == "gestao")).first():
-        return
-    db.add(m.Usuario(id="USR-GESTAO", login="gestao", nome="Gestão", senha_hash=hash_senha("gestao"), papel="gestao"))
-    db.add(
-        m.Usuario(
-            id="USR-OPERADOR",
-            login="operador",
-            nome="Operador",
-            senha_hash=hash_senha("operador"),
-            papel="operador",
-            operador_id="OP-1",
+    senha_gestao = _senha(settings.demo_senha_gestao, "gestao")
+    senha_operador = _senha(settings.demo_senha_operador, "operador")
+    gestao = db.scalars(select(m.Usuario).where(m.Usuario.login == "gestao")).first()
+    operador = db.scalars(select(m.Usuario).where(m.Usuario.login == "operador")).first()
+    if gestao:
+        if settings.demo_senha_gestao.strip():
+            gestao.senha_hash = hash_senha(senha_gestao)
+    else:
+        db.add(m.Usuario(id="USR-GESTAO", login="gestao", nome="Gestão", senha_hash=hash_senha(senha_gestao), papel="gestao"))
+    if operador:
+        if settings.demo_senha_operador.strip():
+            operador.senha_hash = hash_senha(senha_operador)
+    else:
+        db.add(
+            m.Usuario(
+                id="USR-OPERADOR",
+                login="operador",
+                nome="Operador",
+                senha_hash=hash_senha(senha_operador),
+                papel="operador",
+                operador_id="OP-1",
+            )
         )
-    )
 
 
 def seed(dias: int | None = None) -> None:

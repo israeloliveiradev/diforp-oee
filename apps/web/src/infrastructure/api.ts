@@ -52,7 +52,13 @@ export const api = {
   login: (login: string, senha: string) => req<{ access_token: string; papel: string; nome: string }>("/auth/login", { method: "POST", body: JSON.stringify({ login, senha }) }),
   me: () => req("/auth/me"),
   catalogo: () => req<any>("/catalogo"),
-  dataset: () => req<any>("/dataset"),
+  dataset: (filtro?: { maquina_id?: string; desde?: number }) => {
+    const p = new URLSearchParams();
+    if (filtro?.maquina_id) p.set("maquina_id", filtro.maquina_id);
+    if (filtro?.desde) p.set("desde", String(filtro.desde));
+    const q = p.toString();
+    return req<any>(`/dataset${q ? `?${q}` : ""}`);
+  },
   indicadores: (q: string) => req<any>(`/indicadores?${q}`),
   insights: (q: string) => req<any>(`/insights?${q}`),
   paradas: (maq?: string) => req<any[]>(`/eventos/paradas${maq ? `?maquina_id=${maq}` : ""}`),

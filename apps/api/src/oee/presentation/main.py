@@ -140,8 +140,13 @@ def listar_cadastro(entidade: str, db: Session = Depends(db_dep), user: dict = D
 
 
 @app.get("/dataset")
-def get_dataset(db: Session = Depends(db_dep), user: dict = Depends(usuario_atual)):
-    return snapshot(db)
+def get_dataset(
+    maquina_id: str | None = None,
+    desde: int | None = None,
+    db: Session = Depends(db_dep),
+    user: dict = Depends(usuario_atual),
+):
+    return snapshot(db, maquina_id=maquina_id, desde_ms=desde, sem_auditoria=bool(maquina_id or desde))
 
 
 MAPA_MODELO = {
@@ -330,15 +335,13 @@ def api_indicadores(
     db: Session = Depends(db_dep),
     user: dict = Depends(usuario_atual),
 ):
-    ds = snapshot(db)
     agora = int(time.time() * 1000)
-    return ind.dashboard(
-        ds,
-        _filtros(
-            periodo, data_inicio, data_fim, planta_id, area_id, linha_id, maquina_id, produto_id, ordem_id, turno_id, operador_id
-        ),
-        agora,
+    filtros = _filtros(
+        periodo, data_inicio, data_fim, planta_id, area_id, linha_id, maquina_id, produto_id, ordem_id, turno_id, operador_id
     )
+    ini, _fim = ind.janela(filtros, agora)
+    ds = snapshot(db, maquina_id=maquina_id, desde_ms=ini if maquina_id else None, sem_auditoria=True)
+    return ind.dashboard(ds, filtros, agora)
 
 
 @app.get("/eventos/paradas")
@@ -708,7 +711,8 @@ def api_acmp_sug(
     cfg = db.get(m.ConfigApp, "default")
     if cfg and cfg.acmp_ativo is False:
         return []
-    ds = snapshot(db)
+    agora = int(time.time() * 1000)
+    ds = snapshot(db, maquina_id=maquina_id, desde_ms=agora - 7 * 24 * 3600 * 1000, sem_auditoria=True)
     maq = next((m_ for m_ in ds["maquinas"] if m_["id"] == maquina_id), None)
     if not maq:
         raise HTTPException(404, "Máquina não encontrada")

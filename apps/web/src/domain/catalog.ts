@@ -207,12 +207,20 @@ export const PERGUNTAS_PRONTAS: Record<string, string[]> = {
   ],
 };
 
+const PERGUNTAS_POSTO = [
+  "Qual o status desta máquina agora?",
+  "Qual foi a última parada e o motivo?",
+  "Quanto já produziu neste turno?",
+  "Qual o OEE deste turno e a meta foi batida?",
+  "Como este turno compara com o anterior?",
+];
+
 export function perguntasDoPosto(maquinaId?: string) {
   const gerais = PERGUNTAS_PRONTAS.geral;
   if (maquinaId && PERGUNTAS_PRONTAS[maquinaId]) {
-    return [...PERGUNTAS_PRONTAS[maquinaId], gerais[0], gerais[1]];
+    return [...PERGUNTAS_POSTO, ...PERGUNTAS_PRONTAS[maquinaId], gerais[0]];
   }
-  return gerais;
+  return [...PERGUNTAS_POSTO, ...gerais];
 }
 
 export const FILTROS_PADRAO = {

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../infrastructure/api";
 import {
   AUDIT_ACOES,
@@ -550,47 +550,68 @@ export function VisaoGeral() {
   );
 }
 
+function somaProducaoTurno(eventos: any[] | undefined, maquinaId: string, ini: number, fim: number) {
+  let total = 0;
+  let refugo = 0;
+  let retrabalho = 0;
+  for (const e of eventos || []) {
+    if (e.maquina_id !== maquinaId || e.ts < ini || e.ts > fim) continue;
+    total += Number(e.qtd_total) || 0;
+    refugo += Number(e.qtd_refugo) || 0;
+    retrabalho += Number(e.qtd_retrabalho) || 0;
+  }
+  return { total, refugo, retrabalho, aprovado: Math.max(0, total - refugo) };
+}
+
 /* ------------------------------------------------------------------ */
 /* Operação                                                           */
 /* ------------------------------------------------------------------ */
 
 export function Operacao({ notify }: { notify: Notify }) {
   const qc = useQueryClient();
-  const dsQ = useQuery({ queryKey: ["ds"], queryFn: api.dataset, refetchInterval: 8000 });
-  const ds = dsQ.data;
   const [maqId, setMaqId] = useState(localStorage.getItem("oee.maq") || "");
   const [tick, setTick] = useState(0);
   const [ocupado, setOcupado] = useState(false);
   const [modal, setModal] = useState<null | "parada" | "pausa" | "reclass" | "manut" | "prod" | "refugo" | "retr" | "obs" | "ordem">(null);
   const [sug, setSug] = useState<any[]>([]);
+  const dsQ = useQuery({
+    queryKey: ["ds", "op", maqId],
+    queryFn: () => api.dataset(maqId ? { maquina_id: maqId, desde: Date.now() - 36 * 3600 * 1000 } : undefined),
+    refetchInterval: 15000,
+  });
+  const ds = dsQ.data;
   const maq = (ds?.maquinas || []).find((m: any) => m.id === maqId) || ds?.maquinas?.[0];
 
   useEffect(() => {
+    if (maq && maq.id !== maqId) setMaqId(maq.id);
     if (maq) localStorage.setItem("oee.maq", maq.id);
-  }, [maq]);
+  }, [maq, maqId]);
   useEffect(() => {
-    const id = setInterval(() => setTick((n) => n + 1), 1000);
-    return () => clearInterval(id);
+    const relogio = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(relogio);
   }, []);
 
-  const q = maq ? paramsIndicadores({ ...FILTROS_PADRAO, periodo: "turno", maquina_id: maq.id }, ds) : "";
-  const dash = useQuery({ queryKey: ["op", maq?.id, q], enabled: !!maq && !!ds, queryFn: () => api.indicadores(q) });
+  const dash = useQuery({
+    queryKey: ["op", maq?.id, "turno"],
+    enabled: !!maq?.id && !!ds,
+    queryFn: () => api.indicadores(paramsIndicadores({ ...FILTROS_PADRAO, periodo: "turno", maquina_id: maq.id }, ds, Date.now())),
+    placeholderData: keepPreviousData,
+    refetchInterval: 15000,
+  });
 
   const paradaAberta = (ds?.eventos_parada || []).find((p: any) => p.maquina_id === maq?.id && !p.fim);
 
   async function abrirMotivo(tipo: "parada" | "pausa" | "reclass" | "manut") {
     if (!maq) return;
-    if (tipo === "manut") {
-      setSug([]);
-    } else {
-      try {
-        const duracao = paradaAberta ? Math.round((Date.now() - paradaAberta.inicio) / 1000) : undefined;
-        setSug(await api.sugestoes(maq.id, tipo === "reclass" ? duracao : undefined));
-      } catch {
-        setSug([]);
-      }
-    }
+    setSug([]);
     setModal(tipo);
+    if (tipo === "manut") return;
+    try {
+      const duracao = paradaAberta ? Math.round((Date.now() - paradaAberta.inicio) / 1000) : undefined;
+      setSug(await api.sugestoes(maq.id, tipo === "reclass" ? duracao : undefined));
+    } catch {
+      setSug([]);
+    }
   }
 
   async function comFeedback(fn: () => Promise<void>, ok: string, tipo = "ok") {
@@ -638,6 +659,7 @@ export function Operacao({ notify }: { notify: Notify }) {
   const def = ESTADOS[estadoId];
   const ordem = (ds.ordens || []).find((o: any) => o.id === maq.ordem_atual_id);
   const turno = janelaTurno(ds.turnos, Date.now());
+  const pecas = somaProducaoTurno(ds.eventos_producao, maq.id, turno.inicio, Date.now());
   const ind = dash.data?.indicadores;
   const meta = Number(ordem?.meta_qtd || maq.meta_turno || 0);
   const produzindo = estadoId === "PRODUZINDO";
@@ -650,7 +672,7 @@ export function Operacao({ notify }: { notify: Notify }) {
   const ultimos = [...segs].slice(-8).reverse();
   const busy = ocupado;
   const decorridoH = Math.max(0.001, (Date.now() - (turno.inicio || Date.now())) / 3600000);
-  const ritmo = (ind?.producao_total || 0) / decorridoH;
+  const ritmo = pecas.total / decorridoH;
   void tick;
 
   return (
@@ -718,10 +740,10 @@ export function Operacao({ notify }: { notify: Notify }) {
 
       <Painel titulo="Produção do turno">
         <div className="op-producao">
-          <CardKPI rotulo="Produzido" valor={num(ind?.producao_total)} />
-          <CardKPI rotulo="Aprovado" valor={num(ind?.producao_aprovada)} />
-          <CardKPI rotulo="Rejeitado" valor={num(ind?.refugo)} detalhe={ind?.producao_total ? pct(ind.refugo / ind.producao_total) : "—"} />
-          <CardKPI rotulo="Retrabalho" valor={num(ind?.retrabalho)} />
+          <CardKPI rotulo="Produzido" valor={num(pecas.total)} />
+          <CardKPI rotulo="Aprovado" valor={num(pecas.aprovado)} />
+          <CardKPI rotulo="Rejeitado" valor={num(pecas.refugo)} detalhe={pecas.total ? pct(pecas.refugo / pecas.total) : "—"} />
+          <CardKPI rotulo="Retrabalho" valor={num(pecas.retrabalho)} />
           {ind ? (
             <>
               <CardKPI rotulo="Ritmo atual" valor={<>{num(ritmo)} <small>pç/h</small></>} />
@@ -732,7 +754,7 @@ export function Operacao({ notify }: { notify: Notify }) {
         </div>
         <div className="op-meta">
           <span className="rotulo-campo">Meta do turno</span>
-          <BarraProgresso valor={Number(ind?.producao_total || 0)} meta={meta} rotulo="Meta do turno" />
+          <BarraProgresso valor={pecas.total} meta={meta} rotulo="Meta do turno" />
         </div>
       </Painel>
 
@@ -2281,7 +2303,7 @@ export function Chat() {
   return (
     <div className="chat-tela">
       <p className="nota">
-        Escolha a máquina do posto e toque no problema. Aparece só o que fazer agora. Nada liga nem para a máquina.
+        Escolha a máquina e pergunte o status, a última parada, a produção do turno ou o que fazer. O número sai do apontamento. O passo a passo sai do manual. Nada liga nem para a máquina.
         {prontos.length ? "" : " Ainda não há manual pronto — gestão envia o PDF em Manuais."}
       </p>
       <section className="painel">
@@ -2353,7 +2375,7 @@ export function Chat() {
           <div className="chat-mensagens" aria-live="polite">
             {msgs.map((m, i) => (
               <article key={i} className={`chat-bolha ${m.papel === "user" ? "chat-bolha--user" : "chat-bolha--assistente"}`}>
-                <p className="chat-bolha__papel">{m.papel === "user" ? "Você perguntou" : "Passos"}</p>
+                <p className="chat-bolha__papel">{m.papel === "user" ? "Você perguntou" : "Resposta"}</p>
                 {m.papel === "user" ? <p>{m.texto}</p> : <RespostaCurta texto={m.texto} />}
                 {m.papel === "assistant"
                   ? (m.citacoes || []).slice(0, 1).map((c: any, j: number) => {
