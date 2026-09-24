@@ -164,7 +164,7 @@ O chat não liga, não desliga e não aponta na máquina. Ele lê e orienta.
 - A Operação separa o relógio do cartão. O cronômetro anda a cada segundo. A janela do turno só muda a cada 20 segundos, e o número anterior permanece na tela enquanto a resposta nova chega.
 - "Registrar parada" abre o formulário na hora. A sugestão do ACMP entra no campo depois, sem segurar o modal.
 - A Operação pede o conjunto só da máquina escolhida. Indicadores e sugestão de parada também montam só essa máquina, na janela pedida, sem a trilha de auditoria.
-- O chat de posto devolve o OEE do turno, se a meta foi batida, a última peça apontada e a comparação com o turno anterior.
+- O chat de posto devolve na hora, direto do banco, o estado, a produção, o OEE do turno, se a meta foi batida, a última peça e a comparação com o turno anterior. O modelo só entra na pergunta de procedimento do manual.
 - No servidor, as senhas de demonstração, o `JWT_SECRET` e a senha do Postgres deixam de ser os valores de exemplo. O ambiente local de desenvolvimento continua com os padrões do `.env`.
 - Sem `GEMINI_API_KEY`, o passo a passo do manual não responde. O status, o OEE e as paradas do posto continuam saindo direto do banco.
 - Na virada (06:00, 14:00 e 22:00, horário de São Paulo) o estado aberto fecha e reabre no turno novo. O relógio do posto conta o tempo neste turno. O OEE não herda a hora de ontem.

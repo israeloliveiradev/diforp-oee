@@ -246,14 +246,7 @@ def consultar(db: Session, pergunta: str, maquina_id: str | None, usuario_id: st
     if tipo == "posto":
         if not fatos:
             return {"resposta": "Escolha a máquina ou diga o nome dela.", "citacoes": [], "sessao_id": None}
-        if not settings.gemini_api_key:
-            return {"resposta": fatos, "citacoes": [], "sessao_id": None}
-        try:
-            resposta = _gerar(f"{SYSTEM_POSTO}\n\nDADOS:\n{fatos}\n\nPERGUNTA:\n{texto}")
-        except Exception:
-            log.exception("falha ao responder com dados do posto")
-            resposta = fatos
-        return _guardar(db, texto, resposta, [], maquina_id, usuario_id)
+        return _guardar(db, texto, fatos, [], maquina_id, usuario_id)
 
     if not settings.gemini_api_key:
         return {
