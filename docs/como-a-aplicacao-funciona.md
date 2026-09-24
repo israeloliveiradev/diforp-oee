@@ -167,6 +167,7 @@ O chat não liga, não desliga e não aponta na máquina. Ele lê e orienta.
 - O chat de posto devolve o OEE do turno, se a meta foi batida, a última peça apontada e a comparação com o turno anterior.
 - No servidor, as senhas de demonstração, o `JWT_SECRET` e a senha do Postgres deixam de ser os valores de exemplo. O ambiente local de desenvolvimento continua com os padrões do `.env`.
 - Sem `GEMINI_API_KEY`, o passo a passo do manual não responde. O status, o OEE e as paradas do posto continuam saindo direto do banco.
+- Na virada (06:00, 14:00 e 22:00, horário de São Paulo) o estado aberto fecha e reabre no turno novo. O relógio do posto conta o tempo neste turno. O OEE não herda a hora de ontem.
 
 ## Versões possíveis
 

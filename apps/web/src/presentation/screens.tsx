@@ -528,6 +528,8 @@ export function VisaoGeral() {
             const def = ESTADOS[m.estado_atual] || ESTADOS.SEM_ORDEM;
             const g = porMap[m.id];
             const oee = g?.indicadores?.oee;
+            const turnoAgora = janelaTurno(ds.data?.turnos, Date.now());
+            const desde = Math.max(Number(m.estado_desde) || turnoAgora.inicio, turnoAgora.inicio || 0);
             return (
               <button
                 key={m.id}
@@ -539,7 +541,7 @@ export function VisaoGeral() {
                 <span className={`andon__estado padrao--${def.padrao} estado-fundo estado--${m.estado_atual}`}>
                   {def.icone} {def.rotulo}
                 </span>
-                <span className="andon__tempo">{dur((Date.now() - (m.estado_desde || Date.now())) / 1000)}</span>
+                <span className="andon__tempo">{dur((Date.now() - desde) / 1000)}</span>
                 <span className={`andon__oee faixa--${faixaOee(oee, meta)}`}>OEE {pct(oee, 0)}</span>
               </button>
             );
@@ -725,9 +727,9 @@ export function Operacao({ notify }: { notify: Notify }) {
         <div className="faixa-estado__tempo">
           <span className="rotulo-campo">Há</span>
           <strong id="cronometro-estado" className="cronometro">
-            {cron((Date.now() - (maq.estado_desde || Date.now())) / 1000)}
+            {cron((Date.now() - Math.max(Number(maq.estado_desde) || turno.inicio, turno.inicio || 0)) / 1000)}
           </strong>
-          <span className="faixa-estado__desde">desde {hora(maq.estado_desde)}</span>
+          <span className="faixa-estado__desde">desde {hora(Math.max(Number(maq.estado_desde) || turno.inicio, turno.inicio || 0))}</span>
         </div>
       </section>
 

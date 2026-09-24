@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from oee.application import indicadores as ind
 from oee.application import operacao as op
+from oee.application.turno import virar_turnos
 from oee.application.operacao import _auditar
 from oee.config import settings
 from oee.domain import acmp as acmp_dom
@@ -146,6 +147,7 @@ def get_dataset(
     db: Session = Depends(db_dep),
     user: dict = Depends(usuario_atual),
 ):
+    virar_turnos(db)
     return snapshot(db, maquina_id=maquina_id, desde_ms=desde, sem_auditoria=bool(maquina_id or desde))
 
 
@@ -335,6 +337,7 @@ def api_indicadores(
     db: Session = Depends(db_dep),
     user: dict = Depends(usuario_atual),
 ):
+    virar_turnos(db)
     agora = int(time.time() * 1000)
     filtros = _filtros(
         periodo, data_inicio, data_fim, planta_id, area_id, linha_id, maquina_id, produto_id, ordem_id, turno_id, operador_id

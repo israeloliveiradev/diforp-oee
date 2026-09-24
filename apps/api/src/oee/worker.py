@@ -14,6 +14,7 @@ from oee.infrastructure.db.session import SessionLocal
 from oee.infrastructure.jobs import heartbeat, puxar_manual
 from oee.infrastructure.ml.pipeline import treinar_lightgbm
 from oee.infrastructure.rag.service import processar_manual
+from oee.application.turno import virar_turnos
 from oee.infrastructure.simulator import tick
 from oee.seed import criar_tabelas, garantir_usuarios
 
@@ -35,6 +36,7 @@ def loop() -> None:
         try:
             cfg = db.get(m.ConfigApp, "default")
             intervalo = (cfg.intervalo_simulacao_seg if cfg else 5) or 5
+            virar_turnos(db)
             if cfg and cfg.simulacao_ativa:
                 tick(db)
             heartbeat()

@@ -77,6 +77,9 @@ def seed(dias: int | None = None) -> None:
             ds = gerar_demo({"dias": dias or settings.demo_dias, "seed": settings.demo_seed})
             persistir_dataset(db, ds)
             log.info("demo carregada: %s máquinas", len(ds["maquinas"]))
+        from oee.application.turno import virar_turnos
+
+        virar_turnos(db)
         db.commit()
     finally:
         db.close()

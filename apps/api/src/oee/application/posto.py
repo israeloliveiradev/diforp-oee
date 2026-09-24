@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from oee.application.turno import virar_turnos
 from oee.domain.calculations import calcular_oee
 from oee.domain.timeutil import turno_do_instante
 from oee.infrastructure.db import models as m
@@ -186,10 +187,10 @@ def contexto_posto(db: Session, maquina_id: str | None, pergunta: str) -> str:
             return ""
         return "Nenhuma máquina foi escolhida. Máquinas: " + ", ".join(nomes) + "."
 
+    virar_turnos(db)
+    db.refresh(maq)
     agora = int(datetime.now(TZ).timestamp() * 1000)
     estado = ROTULOS_ESTADO.get(maq.estado_atual or "", maq.estado_atual or "desconhecido")
-    desde = _hora(maq.estado_desde)
-    ha = _duracao((agora - int(maq.estado_desde)) / 1000) if maq.estado_desde else "tempo desconhecido"
 
     ordem = db.get(m.Ordem, maq.ordem_atual_id) if maq.ordem_atual_id else None
     produto = db.get(m.Produto, ordem.produto_id) if ordem else None
@@ -197,9 +198,12 @@ def contexto_posto(db: Session, maquina_id: str | None, pergunta: str) -> str:
     turnos = [{"id": t.id, "nome": t.nome, "inicio": t.inicio, "fim": t.fim} for t in db.scalars(select(m.Turno))]
     turno = turno_do_instante(turnos, agora)
 
+    ini_turno = int(turno.get("inicio") or agora)
+    marco = max(int(maq.estado_desde or ini_turno), ini_turno)
+    ha = _duracao((agora - marco) / 1000)
     linhas = [
         f"Máquina: {maq.nome} ({maq.id}).",
-        f"Estado agora: {estado}, desde {_hora(maq.estado_desde)} (há {ha}).",
+        f"Estado agora: {estado}, neste turno desde {_hora(marco)} (há {ha}).",
         f"Turno atual: {turno.get('nome')} ({_hora(turno.get('inicio'))} até {_hora(turno.get('fim'))}).",
     ]
     if operador:
