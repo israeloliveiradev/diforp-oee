@@ -8,6 +8,12 @@ Nada da PoC em `legacy/` foi descartado: operação, dashboards, ACMP, insights,
 
 Este repositório é o que sobe na VPS com Docker Compose.
 
+Quem vai usar o sistema lê o passo a passo antes do restante deste arquivo:
+
+- [Guia do operador](docs/guia-do-operador.md) — o que cada botão faz no posto, com o exemplo de refugo que não pode contar a peça duas vezes.
+- [Guia do gestor](docs/guia-do-gestor.md) — o que cada tela responde, como fechar o turno e o que cada meta muda no número.
+- [Como a aplicação funciona](docs/como-a-aplicacao-funciona.md) — mapa técnico: camadas, chat, o que já está no produto e o que ainda falta no chão.
+
 ---
 
 ## O que o sistema faz
@@ -19,7 +25,7 @@ Este repositório é o que sobe na VPS com Docker Compose.
 
 Telas (HashRouter, mesmo contrato da PoC):
 
-- **Operação** — estado da máquina, abrir/fechar ordem, apontar peça, parada com motivo, solicitar manutenção
+- **Operação** — ordem aberta, crachá, produção, refugo de peça já contada, parada, microparada, passagem de turno. O número da tela é desta ordem. O passo a passo está no guia do operador.
 - **Visão geral / Máquinas / Produção / Paradas / Qualidade / Performance** — OEE e recortes com filtros (planta, área, linha, máquina, produto, ordem, turno, operador)
 - **O que olhar** — desvios do período com uma ação (“Faça agora”)
 - **O que fazer** — ordem, falha e produção saem do banco na hora. O passo a passo do manual (Gemini + pgvector) entra quando a pergunta pede procedimento. Nada liga nem para a máquina
@@ -155,10 +161,10 @@ Instala Docker Engine + Compose plugin.
 
 ### 2. Colocar o código
 
-Neste momento o remoto Git **ainda não está definido neste workspace** (de propósito: o remoto anterior não é o da VPS). Depois de criar o repositório certo:
+O remoto deste projeto é `https://github.com/israeloliveiradev/diforp-oee.git`.
 
 ```bash
-git clone <URL-DO-REPOSITORIO-CORRETO> /opt/diforp-oee
+git clone https://github.com/israeloliveiradev/diforp-oee.git /opt/diforp-oee
 cd /opt/diforp-oee
 ```
 

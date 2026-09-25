@@ -1,6 +1,11 @@
 # Como a aplicação OEE DiFORP funciona
 
-Este texto descreve o sistema inteiro: quem fala com quem, o que cada parte faz, como o chat responde, o que já está sólido, o que vale melhorar e para onde as próximas versões podem ir.
+Este texto descreve o sistema inteiro: quem fala com quem, o que cada parte faz, como o chat responde, o que já está sólido e para onde a versão de chão ainda vai.
+
+Quem vai operar lê o passo a passo, não este mapa:
+
+- Operador: `docs/guia-do-operador.md`
+- Gestor: `docs/guia-do-gestor.md`
 
 O browser não calcula OEE. Ele mostra o que a API devolve. O número mora no PostgreSQL.
 
@@ -91,9 +96,8 @@ Papéis:
 Regras que a tela não pode furar:
 
 - Sem ordem aberta não se aponta produção.
-- Abrir ordem começa em Setup. Produção só depois da liberação.
-- Microparada é até 5 minutos e a máquina já voltou. Acima disso é parada com motivo.
-- Pedido de manutenção deixa a máquina em Manutenção. O operador não religa sozinho.
+- Abrir ordem começa em Setup. A produção do lote começa depois de **Finalizar setup**.
+- Microparada é a parada que voltou antes do limite configurado (padrão 300 segundos). Acima disso continua parada com o motivo escolhido. Setup, manutenção, limpeza e parada planejada não viram microparada.
 - A cor do cartão não é o estado. Vale o nome: Produzindo, Setup, Parada, e assim por diante.
 
 ## Como um apontamento vira número
@@ -105,16 +109,18 @@ sequenceDiagram
   participant API as API
   participant PG as PostgreSQL
 
-  Op->>Web: Registra 25 peças
+  Op->>Web: Registra 25 peças na ordem aberta
   Web->>API: POST /operacao/producao
-  API->>PG: grava evento e auditoria
+  API->>PG: grava evento da ordem e auditoria
   API-->>Web: ok
-  Web->>API: GET /indicadores do turno desta máquina
-  API->>PG: lê estados, peças e paradas da janela
+  Web->>API: GET /indicadores desta ordem
+  API->>PG: lê estados e peças desta ordem
   API-->>Web: OEE, disponibilidade, performance, qualidade, peças
 ```
 
-A Operação pede só o **turno atual** da máquina escolhida. A Visão geral pede o período do filtro (24 horas, 7 dias, e outros). Por isso um número pode existir no histórico e ainda aparecer vazio no turno da tarde, se naquele intervalo não houve peça.
+Na Operação, produzido, aprovado, rejeitado, meta e OEE são da **ordem aberta**. Sem ordem, os cartões ficam em zero. A ordem nova não herda a peça da anterior.
+
+Na Visão geral, os gráficos usam o período do filtro (24 horas, 7 dias, e outros). O andon, na mesma tela, usa o OEE do turno que está aberto agora. Por isso um número pode existir no histórico de 7 dias e o posto da tarde ainda mostrar zero, se esta ordem não teve peça.
 
 O worker, em paralelo, pode simular o posto quando a simulação está ligada, indexar PDF que chegou na fila e retreinar o ACMP de tempos em tempos.
 
