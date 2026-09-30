@@ -185,39 +185,40 @@ def inferir(dataset: dict[str, Any], ctx: dict[str, Any], com_duracao: bool = Fa
     atributos = ATRIBUTOS_EM_CURSO if com_duracao else ATRIBUTOS_INICIO
     amostras = extrair_amostras(dataset)
     salvo = carregar_modelo()
-    if not salvo or salvo.get("tipo") != "lightgbm" or salvo.get("clf") is None or len(amostras) < MINIMO_AMOSTRAS:
-        nb = treinar_nb(amostras, atributos) if amostras else None
-        return sugerir_nb(nb, ctx, 3) if nb else []
+    # Modelo já treinado responde com o contexto do posto; não depende do recorte
+    # estreito de paradas da máquina atual (muitas ainda sem motivo_id).
+    if salvo and salvo.get("tipo") == "lightgbm" and salvo.get("clf") is not None:
+        try:
+            import pandas as pd
 
-    try:
-        import pandas as pd
+            df = pd.DataFrame([{f: str(ctx.get(f) or "") for f in salvo["atributos"]}])
+            for c in df.columns:
+                df[c] = df[c].astype("category")
+                cats = salvo.get("categorias", {}).get(c)
+                if cats:
+                    df[c] = df[c].cat.set_categories(cats)
+            proba = salvo["clf"].predict_proba(df)[0]
+            ordem = np.argsort(proba)[::-1][:3]
+            out = []
+            for i, idx in enumerate(ordem):
+                classe = salvo["inv"][int(idx)]
+                shap_list = _shap_frases(salvo, ctx, classe)
+                out.append(
+                    {
+                        "motivo_id": classe,
+                        "probabilidade": float(proba[idx]),
+                        "posicao": i + 1,
+                        "evidencias": [
+                            {"rotulo": s["rotulo"], "valor": s["valor"], "frase": s["frase"], "proporcao": None, "suporte": None}
+                            for s in shap_list
+                        ],
+                        "shap": shap_list,
+                        "modelo": "lightgbm",
+                    }
+                )
+            return out
+        except Exception:
+            pass
 
-        df = pd.DataFrame([{f: str(ctx.get(f) or "") for f in salvo["atributos"]}])
-        for c in df.columns:
-            df[c] = df[c].astype("category")
-            cats = salvo.get("categorias", {}).get(c)
-            if cats:
-                df[c] = df[c].cat.set_categories(cats)
-        proba = salvo["clf"].predict_proba(df)[0]
-        ordem = np.argsort(proba)[::-1][:3]
-        out = []
-        for i, idx in enumerate(ordem):
-            classe = salvo["inv"][int(idx)]
-            shap_list = _shap_frases(salvo, ctx, classe)
-            out.append(
-                {
-                    "motivo_id": classe,
-                    "probabilidade": float(proba[idx]),
-                    "posicao": i + 1,
-                    "evidencias": [
-                        {"rotulo": s["rotulo"], "valor": s["valor"], "frase": s["frase"], "proporcao": None, "suporte": None}
-                        for s in shap_list
-                    ],
-                    "shap": shap_list,
-                    "modelo": "lightgbm",
-                }
-            )
-        return out
-    except Exception:
-        nb = treinar_nb(amostras, atributos)
-        return sugerir_nb(nb, ctx, 3)
+    nb = treinar_nb(amostras, atributos) if amostras else None
+    return sugerir_nb(nb, ctx, 3) if nb else []

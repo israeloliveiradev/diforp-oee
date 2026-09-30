@@ -62,7 +62,12 @@ def loop() -> None:
                     if maqs:
                         alvo = maqs[getattr(loop, "acmp_i", 0) % len(maqs)]
                         loop.acmp_i = getattr(loop, "acmp_i", 0) + 1
-                        ds_acmp = snapshot(db, maquina_id=alvo.id, desde_ms=int(agora * 1000) - 7 * 24 * 3600 * 1000, sem_auditoria=True)
+                        ds_acmp = snapshot(
+                            db,
+                            desde_ms=int(agora * 1000) - 7 * 24 * 3600 * 1000,
+                            sem_auditoria=True,
+                            sem_producao=True,
+                        )
                         ficha = next((x for x in ds_acmp["maquinas"] if x["id"] == alvo.id), None)
                         if ficha:
                             guardar(alvo.id, inferir(ds_acmp, acmp_dom.contexto_atual(ds_acmp, ficha, {}), com_duracao=False))
@@ -71,7 +76,7 @@ def loop() -> None:
                     log.exception("pré-cálculo do ACMP falhou")
                     loop.acmp_em = agora
             if agora - ultimo_treino > 1800:
-                ds = snapshot(db)
+                ds = snapshot(db, sem_auditoria=True, sem_producao=True)
                 if len(ds.get("eventos_parada") or []) >= 60:
                     log.info("retreinando ACMP")
                     treinar_lightgbm(ds)

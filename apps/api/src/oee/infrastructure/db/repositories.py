@@ -31,7 +31,13 @@ def _q_producao(maquina_id: str | None, desde_ms: int | None):
     return q
 
 
-def snapshot(db: Session, maquina_id: str | None = None, desde_ms: int | None = None, sem_auditoria: bool = False) -> dict[str, Any]:
+def snapshot(
+    db: Session,
+    maquina_id: str | None = None,
+    desde_ms: int | None = None,
+    sem_auditoria: bool = False,
+    sem_producao: bool = False,
+) -> dict[str, Any]:
     cfg = db.get(m.ConfigApp, "default")
     config = {
         "meta_oee": cfg.meta_oee if cfg else 0.75,
@@ -88,7 +94,9 @@ def snapshot(db: Session, maquina_id: str | None = None, desde_ms: int | None = 
             _row(x, ["id", "maquina_id", "ordem_id", "turno_id", "estado", "motivo_id", "inicio", "fim"])
             for x in db.scalars(_q_eventos(select(m.EventoEstado), m.EventoEstado, maquina_id, desde_ms))
         ],
-        "eventos_producao": [
+        "eventos_producao": []
+        if sem_producao
+        else [
             _row(
                 x,
                 ["id", "maquina_id", "ordem_id", "turno_id", "produto_id", "operador_id", "ts", "qtd_total", "qtd_refugo", "qtd_retrabalho", "causa_refugo", "origem"],

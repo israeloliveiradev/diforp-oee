@@ -794,7 +794,13 @@ def api_acmp_sug(
     if cfg and cfg.acmp_ativo is False:
         return []
     agora = int(time.time() * 1000)
-    ds = snapshot(db, maquina_id=maquina_id, desde_ms=agora - 7 * 24 * 3600 * 1000, sem_auditoria=True)
+    # Paradas de todas as máquinas (sem produção) — amostra mínima do NB e contexto do posto.
+    ds = snapshot(
+        db,
+        desde_ms=agora - 7 * 24 * 3600 * 1000,
+        sem_auditoria=True,
+        sem_producao=True,
+    )
     maq = next((m_ for m_ in ds["maquinas"] if m_["id"] == maquina_id), None)
     if not maq:
         raise HTTPException(404, "Máquina não encontrada")
@@ -802,7 +808,7 @@ def api_acmp_sug(
         from oee.infrastructure.acmp_cache import ler
 
         guardado = ler(maquina_id)
-        if guardado is not None:
+        if guardado:
             return guardado
     ctx = acmp_dom.contexto_atual(ds, maq, {"duracao_seg": duracao_seg})
     sugestoes = inferir(ds, ctx, com_duracao=duracao_seg is not None)

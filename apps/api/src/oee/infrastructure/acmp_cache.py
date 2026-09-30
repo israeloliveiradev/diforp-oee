@@ -9,6 +9,8 @@ log = logging.getLogger("oee.acmp")
 
 
 def guardar(maquina_id: str, sugestoes: list) -> None:
+    if not sugestoes:
+        return
     try:
         from oee.infrastructure.jobs import _cliente
 
@@ -25,6 +27,9 @@ def ler(maquina_id: str) -> list | None:
         if not bruto:
             return None
         dados = json.loads(bruto)
-        return dados if isinstance(dados, list) else None
+        # Lista vazia não conta: força novo cálculo em vez de esconder o top-3.
+        if not isinstance(dados, list) or not dados:
+            return None
+        return dados
     except Exception:
         return None
